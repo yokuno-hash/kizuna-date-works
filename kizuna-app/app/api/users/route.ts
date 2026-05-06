@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
 
   const { data: users, error } = await supabaseAdmin
     .from('users')
-    .select('id, name, login_id, role, client_id')
+    .select('id, name, login_id, role, client_id, password_plain')
     .order('created_at', { ascending: true });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -53,6 +53,7 @@ export async function POST(req: NextRequest) {
     name,
     login_id: loginId,
     password: hash,
+    password_plain: password, // 管理者参照用（認証はハッシュで行う）
     role: role || 'user',
     client_id: clientId || null,
   });
@@ -76,6 +77,7 @@ export async function PATCH(req: NextRequest) {
   const update: Record<string, unknown> = {};
   if (typeof newPassword === 'string' && newPassword.length > 0) {
     update.password = await hashPassword(newPassword);
+    update.password_plain = newPassword; // 管理者参照用
   }
   if (clientId !== undefined) {
     update.client_id = clientId || null;

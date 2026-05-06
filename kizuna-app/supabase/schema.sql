@@ -64,6 +64,11 @@ alter table answers
 alter table answers
   add column if not exists accuracy real;
 
+-- 管理者が平文PWを確認できるカラム（認証は引き続きハッシュ列を使用）
+-- 既存ユーザー（移行分）は NULL、新規作成・PW変更で埋まる
+alter table users
+  add column if not exists password_plain text;
+
 -- 進捗テーブル
 create table if not exists progress (
   user_id uuid not null references users(id) on delete cascade,

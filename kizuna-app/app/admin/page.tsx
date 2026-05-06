@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
-interface User { id: string; name: string; login_id: string; role: string; client_id?: string | null; }
+interface User { id: string; name: string; login_id: string; role: string; client_id?: string | null; password_plain?: string | null; }
 interface Client { id: string; name: string; created_at?: string; }
 interface Task { id: string; image_url: string; correct_text: string; category: string; task_type: string; created_at: string; }
 interface ProgressRow {
@@ -563,12 +563,17 @@ export default function AdminPage() {
             </div>
             <div style={S.tableWrap}>
               <table style={S.table}>
-                <thead><tr><th style={S.th}>名前</th><th style={S.th}>ログインID</th><th style={S.th}>権限</th><th style={S.th}>クライアント</th><th style={S.th}>操作</th></tr></thead>
+                <thead><tr><th style={S.th}>名前</th><th style={S.th}>ログインID</th><th style={S.th}>パスワード</th><th style={S.th}>権限</th><th style={S.th}>クライアント</th><th style={S.th}>操作</th></tr></thead>
                 <tbody>
                   {users.map(u => (
                     <tr key={u.id}>
                       <td style={S.td}>{u.name}</td>
                       <td style={S.td}>{u.login_id}</td>
+                      <td style={S.td}>
+                        {u.password_plain
+                          ? <span style={{ fontFamily: 'monospace', fontSize: 13, color: '#2d3748', background: '#fff5d7', padding: '2px 8px', borderRadius: 4 }}>{u.password_plain}</span>
+                          : <span style={{ fontSize: 12, color: '#a0aec0' }} title="既存ユーザー（移行分）または未確認。PW変更で表示されます">—</span>}
+                      </td>
                       <td style={S.td}>{u.role === 'admin' ? '管理者' : '利用者'}</td>
                       <td style={S.td}>
                         <select style={{ ...S.rowInput, padding: '4px 8px', minWidth: 120 }}
