@@ -135,12 +135,6 @@ export default function AdminPage() {
   const [taskMsg, setTaskMsg] = useState('');
   const [taskImages, setTaskImages] = useState<Record<string, string>>({});
 
-  // AI生成タブ
-  const [aiCategory, setAiCategory] = useState('レシート');
-  const [aiTaskType, setAiTaskType] = useState('receipt');
-  const [aiCount, setAiCount] = useState(5);
-  const [aiMsg, setAiMsg] = useState('');
-  const [aiLoading, setAiLoading] = useState(false);
 
 
   // 進捗タブ
@@ -326,36 +320,6 @@ export default function AdminPage() {
     });
     const data = await res.json();
     alert(data.error ? '⚠️ ' + data.error : '✅ 削除しました');
-    loadTasks(admin!.id);
-  };
-
-  // ===== AI生成 =====
-  const generateAI = async () => {
-    if (!aiCategory) { setAiMsg('カテゴリを入力してください'); return; }
-    if (!confirm(`「${aiCategory}」のタスクを${aiCount}件、AIで生成して登録しますか？`)) return;
-    setAiLoading(true); setAiMsg('⏳ Geminiでテキストを生成中...');
-    const res = await fetch('/api/gemini', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: admin!.id, category: aiCategory, count: aiCount }),
-    });
-    const data = await res.json();
-    if (data.error) { setAiMsg('⚠️ ' + data.error); setAiLoading(false); return; }
-    const texts: string[] = data.texts;
-
-    setAiMsg(`⏳ 画像を生成・保存中 (0/${texts.length})`);
-    let saved = 0;
-    const batchRows = texts.map(t => ({ correctText: t, category: aiCategory, taskType: aiTaskType }));
-
-    // テキストを一括保存
-    const saveRes = await fetch('/api/tasks/batch', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: admin!.id, tasks: batchRows }),
-    });
-    const saveData = await saveRes.json();
-    saved = saveData.count || 0;
-
-    setAiLoading(false);
-    setAiMsg(`✅ ${saved}件のタスクを登録しました！`);
     loadTasks(admin!.id);
   };
 
@@ -656,23 +620,6 @@ export default function AdminPage() {
                 <button style={S.addBtn} onClick={addTask}>追加</button>
               </div>
               {taskMsg && <p style={taskMsg.includes('⚠️') ? S.err : S.msg}>{taskMsg}</p>}
-            </div>
-
-            {/* AI自動生成 */}
-            <div style={S.card}>
-              <h3 style={S.cardTitle}>✨ AIで課題を自動生成</h3>
-              <div style={S.row}>
-                <input style={S.rowInput} type="text" placeholder="カテゴリ（例：レシート）" value={aiCategory} onChange={e => setAiCategory(e.target.value)} />
-                <select style={S.rowInput} value={aiTaskType} onChange={e => setAiTaskType(e.target.value)}>
-                  <option value="custom">標準</option>
-                  <option value="receipt">レシート</option>
-                  <option value="form">帳票</option>
-                  <option value="note">メモ</option>
-                </select>
-                <input style={{ ...S.rowInput, flex: 0.4 }} type="number" value={aiCount} min={1} max={50} onChange={e => setAiCount(parseInt(e.target.value) || 5)} />
-                <button style={{ ...S.addBtn, opacity: aiLoading ? 0.6 : 1 }} onClick={generateAI} disabled={aiLoading}>✨ 生成・登録</button>
-              </div>
-              {aiMsg && <p style={aiMsg.includes('⚠️') ? S.err : S.msg}>{aiMsg}</p>}
             </div>
 
             {/* タスク一覧 */}
