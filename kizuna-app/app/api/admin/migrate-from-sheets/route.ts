@@ -24,7 +24,9 @@ const SHEET_NAMES = {
 } as const;
 
 function csvUrl(spreadsheetId: string, sheetName: string): string {
-  return `https://docs.google.com/spreadsheets/d/${encodeURIComponent(spreadsheetId)}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
+  // headers=1 で1行目だけをヘッダーとして扱わせる（gviz の自動ヘッダー検出で複数行が
+  // 1つのヘッダーセルにまとめられる事故を防ぐ）
+  return `https://docs.google.com/spreadsheets/d/${encodeURIComponent(spreadsheetId)}/gviz/tq?tqx=out:csv&headers=1&sheet=${encodeURIComponent(sheetName)}`;
 }
 
 // 単純な RFC4180 互換 CSV パーサ（クォート・改行・エスケープ対応）
@@ -52,28 +54,51 @@ function parseCsv(text: string): string[][] {
   return rows;
 }
 
-async function fetchSheet(spreadsheetId: string, sheetName: string): Promise<{ rows: Row[]; headers: string[]; rawText: string }> {
+async function fetchSheet(
+  spreadsheetId: string,
+  sheetName: string,
+  opts: { positionalColumns?: string[] } = {},
+): Promise<{ rows: Row[]; headers: string[]; rawText: string; headerless: boolean }> {
   const res = await fetch(csvUrl(spreadsheetId, sheetName));
   if (!res.ok) throw new Error(`シート "${sheetName}" を取得できません (HTTP ${res.status})。スプレッドシートの共有設定を「リンクを知っている全員（閲覧者）」にしてください。`);
   const text = await res.text();
-  // BOM を除去
   const cleanText = text.replace(/^﻿/, '');
   const grid = parseCsv(cleanText);
-  if (grid.length === 0) return { rows: [], headers: [], rawText: cleanText };
-  const headers = grid[0].map((h) => h.trim().toLowerCase());
-  const rows = grid.slice(1)
+  if (grid.length === 0) return { rows: [], headers: [], rawText: cleanText, headerless: false };
+
+  // 1行目がヘッダーか判定：positionalColumns が指定されていて、1行目の先頭セルが
+  // データらしい（UUID）なら、ヘッダー無しシートとして扱う
+  const firstRow = grid[0];
+  const looksLikeData = opts.positionalColumns && firstRow[0] && UUID_RE.test(firstRow[0]);
+
+  let headers: string[];
+  let dataRows: string[][];
+  let headerless = false;
+
+  if (looksLikeData && opts.positionalColumns) {
+    headers = opts.positionalColumns;
+    dataRows = grid;
+    headerless = true;
+  } else {
+    headers = firstRow.map((h) => h.trim().toLowerCase());
+    dataRows = grid.slice(1);
+  }
+
+  const rows = dataRows
     .filter((r) => r.some((c) => c && c.trim() !== ''))
     .map((r) => {
       const obj: Row = {};
-      // ヘッダーがある列
-      headers.forEach((h, i) => { obj[h] = (r[i] ?? '').trim(); });
-      // ヘッダーがない（追加された）列も保持
+      headers.forEach((h, i) => {
+        const key = h || `_col${i}`;
+        obj[key] = (r[i] ?? '').trim();
+      });
       for (let i = headers.length; i < r.length; i++) {
         obj[`_col${i}`] = (r[i] ?? '').trim();
       }
       return obj;
     });
-  return { rows, headers, rawText: cleanText };
+
+  return { rows, headers, rawText: cleanText, headerless };
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -220,15 +245,26 @@ export async function POST(req: NextRequest) {
   catch { progData = { rows: [], headers: [], rawText: '' } as { rows: Row[]; headers: string[]; rawText: string }; }
   const progRows = progData.rows;
 
-  const progPayload = progRows
+  const progRaw = progRows
     .filter((r) => isUuid(r.user_id))
     .map((r) => ({
       user_id: r.user_id,
       month: toMonth(r.month),
       completed_count: parseInt(r.completed_count || '0') || 0,
-      current_task_id: isUuid(r.current_task_id) ? r.current_task_id : null,
+      // current_task_id 列のヘッダーが空な場合があるので _col3 もフォールバック
+      current_task_id: isUuid(r.current_task_id) ? r.current_task_id : (isUuid(r._col3) ? r._col3 : null),
     }))
     .filter((r): r is { user_id: string; month: string; completed_count: number; current_task_id: string | null } => r.month !== null);
+
+  // (user_id, month) で重複していると ON CONFLICT が同チャンク内で2回当たって
+  // PostgreSQL がエラーを出す。最大の completed_count を残してデデュープ。
+  const progDedup = new Map<string, typeof progRaw[number]>();
+  for (const p of progRaw) {
+    const k = `${p.user_id}|${p.month}`;
+    const prev = progDedup.get(k);
+    if (!prev || p.completed_count > prev.completed_count) progDedup.set(k, p);
+  }
+  const progPayload = Array.from(progDedup.values());
   summary.progress = {
     fetched: progRows.length,
     upserted: 0,
@@ -247,9 +283,16 @@ export async function POST(req: NextRequest) {
   }
 
   // ---- 4) answers ----
-  let ansData: { rows: Row[]; headers: string[] };
-  try { ansData = await fetchSheet(sid, SHEET_NAMES.answers); }
-  catch { ansData = { rows: [], headers: [], rawText: '' } as { rows: Row[]; headers: string[]; rawText: string }; }
+  // GAS の answers シートはヘッダー行が無い場合があるため、ヘッダー無しモードに
+  // フォールバックできるように positionalColumns を渡す
+  let ansData: { rows: Row[]; headers: string[]; headerless?: boolean };
+  try {
+    ansData = await fetchSheet(sid, SHEET_NAMES.answers, {
+      positionalColumns: ['id', 'user_id', 'task_id', 'answer_text', 'is_correct', 'created_at', 'ondemand_correct_text', 'accuracy'],
+    });
+  } catch {
+    ansData = { rows: [], headers: [], rawText: '' } as { rows: Row[]; headers: string[]; rawText: string };
+  }
   const ansRows = ansData.rows;
 
   // 既存の tasks.id を取得
@@ -267,7 +310,7 @@ export async function POST(req: NextRequest) {
   }> = [];
   for (const r of ansFiltered) {
     if (validTaskIds.has(r.task_id)) continue;
-    const ondemandCorrect = r._col6 || r.ondemand_correct_text || '';
+    const ondemandCorrect = r.ondemand_correct_text || r._col6 || '';
     if (!ondemandCorrect) continue;
     ondemandShadowTasks.push({
       id: r.task_id,
@@ -298,7 +341,6 @@ export async function POST(req: NextRequest) {
       answer_text: r.answer_text || '',
       is_correct: toBool(r.is_correct),
       accuracy: (() => {
-        // ヘッダー accuracy がなければ _col7 を見る
         const v = r.accuracy || r._col7 || '';
         const f = parseFloat(v);
         return !isNaN(f) ? f : null;
