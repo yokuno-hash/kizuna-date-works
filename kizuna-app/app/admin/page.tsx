@@ -2,13 +2,24 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
-interface User { id: string; name: string; login_id: string; role: string; client_id?: string | null; client_name?: string | null; }
+interface User { id: string; name: string; login_id: string; role: string; client_id?: string | null; }
+interface Client { id: string; name: string; created_at?: string; }
 interface Task { id: string; image_url: string; correct_text: string; category: string; task_type: string; created_at: string; }
-interface ProgressRow { user_id: string; name: string; login_id: string; month: string; completed_count: number; client_name?: string | null; }
-interface Answer { id: string; user_name: string; user_id: string; task_category: string; task_type: string; image_url: string; correct_text: string; answer_text: string; is_correct: boolean; created_at: string; updated_at?: string | null; }
-interface Client { id: string; name: string; created_at: string; }
+interface ProgressRow {
+  user_id: string;
+  name: string;
+  login_id: string;
+  client_id: string | null;
+  month: string;
+  completed_count: number;
+  today_count: number;
+  correct_count: number;
+  wrong_count: number;
+  empty_count: number;
+}
+interface Answer { id: string; user_name: string; user_id: string; client_id: string | null; client_name: string; task_category: string; task_type: string; image_url: string; correct_text: string; answer_text: string; is_correct: boolean; accuracy: number | null; created_at: string; updated_at: string | null; }
 
-type Tab = 'users' | 'tasks' | 'progress' | 'answers' | 'clients';
+type Tab = 'clients' | 'users' | 'tasks' | 'progress' | 'answers';
 
 // Canvas描画（AdminPageで使用）
 async function createTextImage(text: string, taskType: string): Promise<string> {
@@ -66,6 +77,7 @@ async function createTextImage(text: string, taskType: string): Promise<string> 
     }
     ctx.restore();
   } else {
+    // custom/form/note: シンプルなテキスト画像
     const lineH = 46, fontSize = 28, padTop = 50;
     const W = 700, spW = 590;
     const spH = Math.max(400, lines.length * lineH + padTop + 28);
@@ -97,6 +109,11 @@ export default function AdminPage() {
   const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
+
+  // クライアント
+  const [clients, setClients] = useState<Client[]>([]);
+  const [newClientName, setNewClientName] = useState('');
+  const [clientMsg, setClientMsg] = useState('');
 
   // ユーザータブ
   const [users, setUsers] = useState<User[]>([]);
@@ -134,22 +151,26 @@ export default function AdminPage() {
   const [quota, setQuota] = useState(750);
   const [quotaInput, setQuotaInput] = useState(750);
   const [quotaMsg, setQuotaMsg] = useState('');
+  const [progressClientFilter, setProgressClientFilter] = useState('');
 
   // 回答タブ
   const [answers, setAnswers] = useState<Answer[]>([]);
   const [answerUsers, setAnswerUsers] = useState<User[]>([]);
   const [answerFilter, setAnswerFilter] = useState('');
+  const [answerClientFilter, setAnswerClientFilter] = useState('');
   const [answersMsg, setAnswersMsg] = useState('');
 
-  // クライアントタブ
-  const [clients, setClients] = useState<Client[]>([]);
-  const [newClientName, setNewClientName] = useState('');
-  const [clientMsg, setClientMsg] = useState('');
+  const loadClients = useCallback(async (uid: string) => {
+    const res = await fetch(`/api/clients?userId=${uid}`);
+    const data = await res.json();
+    if (data.clients) setClients(data.clients);
+  }, []);
 
   const loadUsers = useCallback(async (uid: string) => {
     const res = await fetch(`/api/users?userId=${uid}`);
     const data = await res.json();
     if (data.users) setUsers(data.users);
+    if (data.clients) setClients(data.clients);
   }, []);
 
   const loadTasks = useCallback(async (uid: string) => {
@@ -158,6 +179,7 @@ export default function AdminPage() {
     if (!data.tasks) return;
     setTasks(data.tasks);
 
+    // 画像URLがないタスクはCanvasで生成
     const imgs: Record<string, string> = {};
     for (const t of data.tasks) {
       if (t.image_url) { imgs[t.id] = t.image_url; continue; }
@@ -173,21 +195,19 @@ export default function AdminPage() {
     const data = await res.json();
     if (data.progress) setProgressRows(data.progress);
     if (data.quota) { setQuota(data.quota); setQuotaInput(data.quota); }
+    if (data.clients) setClients(data.clients);
   }, []);
 
-  const loadAnswers = useCallback(async (uid: string, filter = '') => {
-    const url = `/api/answers?userId=${uid}${filter ? `&targetUserId=${filter}` : ''}`;
-    const res = await fetch(url);
+  const loadAnswers = useCallback(async (uid: string, userFilter = '', clientFilter = '') => {
+    const params = new URLSearchParams({ userId: uid });
+    if (userFilter) params.set('targetUserId', userFilter);
+    if (clientFilter) params.set('clientId', clientFilter);
+    const res = await fetch(`/api/answers?${params.toString()}`);
     const data = await res.json();
     if (data.answers) setAnswers(data.answers);
     if (data.users) setAnswerUsers(data.users);
-    setAnswersMsg(data.answers ? `${data.answers.length}件` : '');
-  }, []);
-
-  const loadClients = useCallback(async (uid: string) => {
-    const res = await fetch(`/api/clients?userId=${uid}`);
-    const data = await res.json();
     if (data.clients) setClients(data.clients);
+    setAnswersMsg(data.answers ? `${data.answers.length}件` : '');
   }, []);
 
   const handleLogin = async () => {
@@ -201,10 +221,10 @@ export default function AdminPage() {
     if (data.user.role !== 'admin') { setLoginError('管理者権限がありません'); return; }
     setAdmin(data.user);
     sessionStorage.setItem('adminUser', JSON.stringify(data.user));
+    loadClients(data.user.id);
     loadUsers(data.user.id);
     loadTasks(data.user.id);
     loadProgress(data.user.id);
-    loadClients(data.user.id);
   };
 
   const handleLogout = () => {
@@ -218,12 +238,39 @@ export default function AdminPage() {
     if (saved) {
       const u = JSON.parse(saved) as User;
       setAdmin(u);
+      loadClients(u.id);
       loadUsers(u.id);
       loadTasks(u.id);
       loadProgress(u.id);
-      loadClients(u.id);
     }
-  }, [loadUsers, loadTasks, loadProgress, loadClients]);
+  }, [loadClients, loadUsers, loadTasks, loadProgress]);
+
+  // ===== クライアント管理 =====
+  const addClient = async () => {
+    setClientMsg('');
+    if (!newClientName.trim()) { setClientMsg('⚠️ クライアント名を入力してください'); return; }
+    const res = await fetch('/api/clients', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: admin!.id, name: newClientName }),
+    });
+    const data = await res.json();
+    if (data.error) { setClientMsg('⚠️ ' + data.error); return; }
+    setClientMsg('✅ 追加しました');
+    setNewClientName('');
+    loadClients(admin!.id);
+  };
+
+  const deleteClient = async (clientId: string, name: string) => {
+    if (!confirm(`「${name}」を削除しますか？所属ユーザーは未所属になります。`)) return;
+    const res = await fetch('/api/clients', {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: admin!.id, clientId }),
+    });
+    const data = await res.json();
+    if (data.error) { alert('⚠️ ' + data.error); return; }
+    loadClients(admin!.id);
+    loadUsers(admin!.id);
+  };
 
   // ===== ユーザー管理 =====
   const addUser = async () => {
@@ -235,7 +282,17 @@ export default function AdminPage() {
     const data = await res.json();
     if (data.error) { setUserMsg('⚠️ ' + data.error); return; }
     setUserMsg('✅ 追加しました');
-    setNewName(''); setNewLoginId(''); setNewPass(''); setNewUserClientId('');
+    setNewName(''); setNewLoginId(''); setNewPass('');
+    loadUsers(admin!.id);
+  };
+
+  const changeUserClient = async (targetUserId: string, clientId: string) => {
+    const res = await fetch('/api/users', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: admin!.id, targetUserId, clientId }),
+    });
+    const data = await res.json();
+    if (data.error) { alert('⚠️ ' + data.error); return; }
     loadUsers(admin!.id);
   };
 
@@ -289,14 +346,16 @@ export default function AdminPage() {
     const texts: string[] = data.texts;
 
     setAiMsg(`⏳ 画像を生成・保存中 (0/${texts.length})`);
+    let saved = 0;
     const batchRows = texts.map(t => ({ correctText: t, category: aiCategory, taskType: aiTaskType }));
 
+    // テキストを一括保存
     const saveRes = await fetch('/api/tasks/batch', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId: admin!.id, tasks: batchRows }),
     });
     const saveData = await saveRes.json();
-    const saved = saveData.count || 0;
+    saved = saveData.count || 0;
 
     setAiLoading(false);
     setAiMsg(`✅ ${saved}件のタスクを登録しました！`);
@@ -331,28 +390,97 @@ export default function AdminPage() {
     loadProgress(admin!.id);
   };
 
-  const downloadCsv = () => {
-    if (!progressRows.length) return;
-    const header = 'client_name,name,login_id,month,completed_count\n';
-    const body = progressRows.map(p => `${p.client_name ?? ''},${p.name},${p.login_id},${p.month},${p.completed_count}`).join('\n');
-    const blob = new Blob(['﻿' + header + body], { type: 'text/csv;charset=utf-8' });
+  const [migrateSheetId, setMigrateSheetId] = useState('111edUbnPufve1c9YPdoaJt2KAXYnd37RPk--ZtjqT6c');
+  const [migrateMsg, setMigrateMsg] = useState('');
+  const [migrating, setMigrating] = useState(false);
+
+  const runMigration = async (dryRun: boolean) => {
+    if (!migrateSheetId.trim()) { setMigrateMsg('⚠️ スプレッドシートIDを入力してください'); return; }
+    if (!dryRun && !confirm('GAS スプレッドシートから Supabase へデータを移行します。\n（再実行しても重複しません）\n実行しますか？')) return;
+    setMigrating(true); setMigrateMsg(dryRun ? '⏳ 試算中…' : '⏳ 移行中…（数分かかる場合があります）');
+    try {
+      const res = await fetch('/api/admin/migrate-from-sheets', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: admin!.id, spreadsheetId: migrateSheetId.trim(), dryRun }),
+      });
+      const data = await res.json();
+      if (data.error) { setMigrateMsg('⚠️ ' + data.error); return; }
+      const s = data.summary || {};
+      const lines = ['users', 'tasks', 'progress', 'answers'].map(k => {
+        const v = s[k] || { fetched: 0, upserted: 0, errors: [] };
+        return `${k}: 取得 ${v.fetched} / 反映 ${v.upserted}${v.errors.length ? ` ⚠️${v.errors.length}件エラー` : ''}`;
+      });
+      setMigrateMsg(`${dryRun ? '🔍 試算結果' : '✅ 移行完了'}\n` + lines.join('\n'));
+      if (!dryRun) {
+        loadUsers(admin!.id); loadTasks(admin!.id); loadProgress(admin!.id);
+      }
+    } catch (e) {
+      setMigrateMsg('⚠️ 通信エラー: ' + (e as Error).message);
+    } finally {
+      setMigrating(false);
+    }
+  };
+
+  const backfillAccuracy = async () => {
+    if (!confirm('既存の回答の正答率を再計算します（時間がかかる場合があります）。実行しますか？')) return;
+    const res = await fetch('/api/admin/backfill-accuracy', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: admin!.id }),
+    });
+    const data = await res.json();
+    if (data.error) { alert('⚠️ ' + data.error); return; }
+    alert(`✅ 完了：${data.updated} / ${data.scanned} 件を更新しました`);
+    loadProgress(admin!.id);
+    loadAnswers(admin!.id, answerFilter, answerClientFilter);
+  };
+
+  const clientNameOf = (cid: string | null | undefined) => {
+    if (!cid) return '';
+    return clients.find(c => c.id === cid)?.name ?? '';
+  };
+
+  const csvEscape = (v: string | number | null | undefined) => {
+    const s = String(v ?? '');
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+
+  const downloadProgressCsv = () => {
+    const rows = progressClientFilter
+      ? progressRows.filter(p => p.client_id === progressClientFilter)
+      : progressRows;
+    if (!rows.length) return;
+    const header = 'client_name,name,login_id,month,today_count,completed_count,correct_count,wrong_count,empty_count\n';
+    const body = rows.map(p => [
+      clientNameOf(p.client_id), p.name, p.login_id, p.month,
+      p.today_count, p.completed_count, p.correct_count, p.wrong_count, p.empty_count,
+    ].map(csvEscape).join(',')).join('\n');
+    const blob = new Blob(['\uFEFF' + header + body], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'progress.csv'; a.click();
+    const a = document.createElement('a'); a.href = url;
+    a.download = `progress${progressClientFilter ? '_' + clientNameOf(progressClientFilter) : ''}.csv`;
+    a.click();
     URL.revokeObjectURL(url);
   };
 
-  // ===== クライアント管理 =====
-  const addClient = async () => {
-    setClientMsg('');
-    const res = await fetch('/api/clients', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: admin!.id, name: newClientName }),
-    });
-    const data = await res.json();
-    if (data.error) { setClientMsg('⚠️ ' + data.error); return; }
-    setClientMsg('✅ 作成しました');
-    setNewClientName('');
-    loadClients(admin!.id);
+  const downloadAnswersCsv = () => {
+    if (!answers.length) return;
+    const header = 'date,client_name,user_name,task_id,task_category,answer_text,is_correct,accuracy,is_empty,created_at,updated_at\n';
+    const body = answers.map(a => {
+      const isEmpty = !a.answer_text || a.answer_text.trim() === '' || a.answer_text === '{"items":[]}';
+      const date = a.created_at ? new Date(a.created_at).toLocaleDateString('ja-JP') : '';
+      const acc = a.accuracy != null ? (a.accuracy * 100).toFixed(1) + '%' : '';
+      return [
+        date, a.client_name, a.user_name, a.id, a.task_category,
+        a.answer_text, a.is_correct ? '\u6B63\u89E3' : '\u4E0D\u6B63\u89E3', acc, isEmpty ? '\u672A\u5165\u529B' : '',
+        a.created_at, a.updated_at ?? '',
+      ].map(csvEscape).join(',');
+    }).join('\n');
+    const blob = new Blob(['\uFEFF' + header + body], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url;
+    a.download = `answers${answerClientFilter ? '_' + clientNameOf(answerClientFilter) : ''}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   // ===== ログイン画面 =====
@@ -360,7 +488,7 @@ export default function AdminPage() {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#f7f8fc' }}>
         <div style={{ background: '#fff', borderRadius: 20, boxShadow: '0 4px 24px rgba(0,0,0,0.08)', padding: '40px 32px', width: 400 }}>
-          <h2 style={{ fontSize: 20, color: '#1a202c', marginBottom: 24, textAlign: 'center' }}>🔐 管理者ログイン</h2>
+          <h2 style={{ fontSize: 20, color: '#1a202c', marginBottom: 24, textAlign: 'center' }}>⌨️ 絆データワークス 管理者ログイン</h2>
           <div style={{ marginBottom: 12 }}>
             <label style={S.label}>ログインID</label>
             <input style={S.input} type="text" value={loginId} onChange={e => setLoginId(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleLogin()} autoComplete="username" />
@@ -377,19 +505,11 @@ export default function AdminPage() {
   }
 
   // ===== 管理画面 =====
-  // 進捗をクライアントごとにグループ化
-  const clientGroups = progressRows.reduce<Record<string, ProgressRow[]>>((acc, p) => {
-    const key = p.client_name ?? '(未設定)';
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(p);
-    return acc;
-  }, {});
-
   return (
     <div style={{ fontFamily: "'Noto Sans JP', sans-serif", background: '#f7f8fc', minHeight: '100vh' }}>
       {/* ヘッダー */}
       <div style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: '#fff', padding: '16px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1 style={{ fontSize: 18, margin: 0 }}>⚙️ 絆データワークス 管理パネル</h1>
+        <h1 style={{ fontSize: 18, margin: 0 }}>⌨️ 絆データワークス 管理者パネル</h1>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button style={S.headerBtn} onClick={() => window.location.href = '/'} title="ユーザー画面を開く">📝 ユーザー画面</button>
           <button style={S.headerBtn} onClick={handleLogout}>ログアウト</button>
@@ -397,16 +517,68 @@ export default function AdminPage() {
       </div>
 
       {/* タブ */}
-      <div style={{ display: 'flex', gap: 8, padding: '16px 32px 0', borderBottom: '2px solid #e2e8f0', background: '#fff', flexWrap: 'wrap' }}>
-        {(['users', 'tasks', 'progress', 'answers', 'clients'] as Tab[]).map(t => (
+      <div style={{ display: 'flex', gap: 8, padding: '16px 32px 0', borderBottom: '2px solid #e2e8f0', background: '#fff' }}>
+        {(['clients', 'users', 'tasks', 'progress', 'answers'] as Tab[]).map(t => (
           <button key={t} style={{ ...S.tab, ...(tab === t ? S.tabActive : {}) }}
-            onClick={() => { setTab(t); if (t === 'answers' && admin) loadAnswers(admin.id, answerFilter); }}>
-            {t === 'users' ? '👥 ユーザー' : t === 'tasks' ? '📋 タスク' : t === 'progress' ? '📊 進捗' : t === 'answers' ? '📝 回答管理' : '🏢 クライアント'}
+            onClick={() => { setTab(t); if (t === 'answers' && admin) loadAnswers(admin.id, answerFilter, answerClientFilter); }}>
+            {t === 'clients' ? '🏢 クライアント' : t === 'users' ? '👥 ユーザー' : t === 'tasks' ? '📋 タスク' : t === 'progress' ? '📊 進捗' : '📝 回答管理'}
           </button>
         ))}
       </div>
 
       <div style={{ padding: '24px 32px', maxWidth: 960, margin: '0 auto' }}>
+
+        {/* ===== クライアントタブ ===== */}
+        {tab === 'clients' && (
+          <>
+            {/* GASスプレッドシートからの自動移行 */}
+            <div style={{ ...S.card, border: '2px solid #fbd38d', background: '#fffaf0' }}>
+              <h3 style={{ ...S.cardTitle, color: '#9c4221' }}>📦 GASスプレッドシートからデータ移行</h3>
+              <p style={{ fontSize: 13, color: '#744210', marginBottom: 10 }}>
+                既存のGoogleスプレッドシート（users / tasks / answers / progress）の内容を Supabase に取り込みます。
+                <br />
+                <b>事前にスプレッドシートを「リンクを知っている全員（閲覧者）」に共有</b>してください。
+                IDは維持されるので、利用者は今のIDとパスワードでログインできます。再実行しても重複しません。
+              </p>
+              <div style={S.row}>
+                <input style={{ ...S.rowInput, flex: 2 }} type="text" placeholder="スプレッドシートID"
+                  value={migrateSheetId} onChange={e => setMigrateSheetId(e.target.value)} />
+                <button style={{ ...S.addBtn, background: '#fff', color: '#9c4221', border: '1px solid #fbd38d', opacity: migrating ? 0.6 : 1 }}
+                  onClick={() => runMigration(true)} disabled={migrating}>🔍 試算（DRY-RUN）</button>
+                <button style={{ ...S.addBtn, background: 'linear-gradient(135deg,#ed8936,#dd6b20)', opacity: migrating ? 0.6 : 1 }}
+                  onClick={() => runMigration(false)} disabled={migrating}>📦 移行を実行</button>
+              </div>
+              {migrateMsg && (
+                <pre style={{ fontSize: 12, color: migrateMsg.includes('⚠️') ? '#c53030' : '#276749', whiteSpace: 'pre-wrap', margin: '8px 0 0', fontFamily: 'inherit' }}>{migrateMsg}</pre>
+              )}
+            </div>
+
+            <div style={S.card}>
+              <h3 style={S.cardTitle}>➕ 新規クライアント追加</h3>
+              <div style={S.row}>
+                <input style={S.rowInput} type="text" placeholder="会社名・クライアント名" value={newClientName}
+                  onChange={e => setNewClientName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addClient()} />
+                <button style={S.addBtn} onClick={addClient}>追加</button>
+              </div>
+              {clientMsg && <p style={clientMsg.includes('⚠️') ? S.err : S.msg}>{clientMsg}</p>}
+            </div>
+            <div style={S.tableWrap}>
+              <table style={S.table}>
+                <thead><tr><th style={S.th}>クライアント名</th><th style={S.th}>所属ユーザー数</th><th style={S.th}>操作</th></tr></thead>
+                <tbody>
+                  {clients.map(c => (
+                    <tr key={c.id}>
+                      <td style={S.td}>{c.name}</td>
+                      <td style={S.td}>{users.filter(u => u.client_id === c.id).length}</td>
+                      <td style={S.td}><button style={S.delBtn} onClick={() => deleteClient(c.id, c.name)}>🗑️ 削除</button></td>
+                    </tr>
+                  ))}
+                  {!clients.length && <tr><td style={S.td} colSpan={3}>クライアントが登録されていません</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
 
         {/* ===== ユーザータブ ===== */}
         {tab === 'users' && (
@@ -422,7 +594,7 @@ export default function AdminPage() {
                   <option value="admin">管理者</option>
                 </select>
                 <select style={S.rowInput} value={newUserClientId} onChange={e => setNewUserClientId(e.target.value)}>
-                  <option value="">クライアントなし</option>
+                  <option value="">クライアント未選択</option>
                   {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
                 <button style={S.addBtn} onClick={addUser}>追加</button>
@@ -431,14 +603,21 @@ export default function AdminPage() {
             </div>
             <div style={S.tableWrap}>
               <table style={S.table}>
-                <thead><tr><th style={S.th}>名前</th><th style={S.th}>ログインID</th><th style={S.th}>クライアント</th><th style={S.th}>権限</th><th style={S.th}>操作</th></tr></thead>
+                <thead><tr><th style={S.th}>名前</th><th style={S.th}>ログインID</th><th style={S.th}>権限</th><th style={S.th}>クライアント</th><th style={S.th}>操作</th></tr></thead>
                 <tbody>
                   {users.map(u => (
                     <tr key={u.id}>
                       <td style={S.td}>{u.name}</td>
                       <td style={S.td}>{u.login_id}</td>
-                      <td style={{ ...S.td, color: '#667eea', fontWeight: 700 }}>{u.client_name ?? '-'}</td>
                       <td style={S.td}>{u.role === 'admin' ? '管理者' : '利用者'}</td>
+                      <td style={S.td}>
+                        <select style={{ ...S.rowInput, padding: '4px 8px', minWidth: 120 }}
+                          value={u.client_id ?? ''}
+                          onChange={e => changeUserClient(u.id, e.target.value)}>
+                          <option value="">未所属</option>
+                          {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                      </td>
                       <td style={S.td}><button style={S.resetBtn} onClick={() => resetPw(u.id, u.name)}>PW変更</button></td>
                     </tr>
                   ))}
@@ -457,7 +636,7 @@ export default function AdminPage() {
               <p style={{ fontSize: 13, color: '#718096', marginBottom: 12 }}>先月分のタスクを削除し、全ユーザー分のレシートタスクをGemini APIで並列生成します。</p>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
                 <span style={{ fontSize: 14, color: '#4a5568' }}>生成枚数:</span>
-                <input type="number" value={monthlyCount} onChange={e => setMonthlyCount(parseInt(e.target.value) || 750)} min={1} max={1000}
+                <input type="number" value={monthlyCount} onChange={e => setMonthlyCount(parseInt(e.target.value) || 400)} min={1} max={1000}
                   style={{ width: 90, border: '2px solid #e2e8f0', borderRadius: 8, padding: 8, fontFamily: 'inherit', fontSize: 14 }} />
                 <button style={{ ...S.addBtn, background: 'linear-gradient(135deg,#9f7aea,#6b46c1)', opacity: monthlyLoading ? 0.6 : 1 }}
                   onClick={generateMonthly} disabled={monthlyLoading}>
@@ -552,78 +731,133 @@ export default function AdminPage() {
                 {quotaMsg && <span style={{ fontSize: 13, color: '#276749' }}>{quotaMsg}</span>}
               </div>
             </div>
-            <button style={S.csvBtn} onClick={downloadCsv}>📥 CSVダウンロード</button>
 
-            {/* クライアント別グループ表示 */}
-            {Object.entries(clientGroups).map(([clientName, rows]) => {
-              const total = rows.reduce((s, r) => s + r.completed_count, 0);
-              return (
-                <div key={clientName} style={{ marginBottom: 32 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 8 }}>
-                    <h3 style={{ fontSize: 16, color: '#553c9a', margin: 0, fontWeight: 700 }}>🏢 {clientName}</h3>
-                    <span style={{ fontSize: 13, color: '#718096' }}>今月合計: {total} / {quota * rows.length} ({rows.length}名)</span>
-                  </div>
-                  <div style={S.tableWrap}>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
+              <select style={{ ...S.rowInput, maxWidth: 240 }} value={progressClientFilter} onChange={e => setProgressClientFilter(e.target.value)}>
+                <option value="">全クライアント</option>
+                {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+              <button style={S.csvBtn} onClick={downloadProgressCsv}>📥 進捗CSV</button>
+              <button style={{ ...S.csvBtn, borderColor: '#fbd38d', background: '#fffaf0', color: '#9c4221' }}
+                onClick={backfillAccuracy} title="過去の回答の正答率を再計算して埋めます">
+                🔄 過去分の正答率を再計算
+              </button>
+            </div>
+
+            {(() => {
+              const filtered = progressClientFilter
+                ? progressRows.filter(p => p.client_id === progressClientFilter)
+                : progressRows;
+
+              const groups = new Map<string, ProgressRow[]>();
+              for (const p of filtered) {
+                const key = p.client_id ?? '__none__';
+                if (!groups.has(key)) groups.set(key, []);
+                groups.get(key)!.push(p);
+              }
+
+              return Array.from(groups.entries()).map(([key, rows]) => {
+                const clientName = key === '__none__' ? '（未所属）' : (clients.find(c => c.id === key)?.name ?? '（不明）');
+                const today = rows.reduce((s, r) => s + r.today_count, 0);
+                const completed = rows.reduce((s, r) => s + r.completed_count, 0);
+                const correct = rows.reduce((s, r) => s + r.correct_count, 0);
+                const wrong = rows.reduce((s, r) => s + r.wrong_count, 0);
+                const empty = rows.reduce((s, r) => s + r.empty_count, 0);
+                const answered = correct + wrong;
+                const accuracyPct = answered > 0 ? ((correct / answered) * 100).toFixed(1) : '—';
+                const totalQuota = quota * rows.length;
+                return (
+                  <div key={key} style={{ ...S.card, padding: 0, overflow: 'hidden' }}>
+                    <div style={{ padding: '14px 20px', background: 'linear-gradient(90deg,#edf2f7,#fff)', borderBottom: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: '#2d3748', marginBottom: 6 }}>【{clientName}】</div>
+                      <div style={{ fontSize: 13, color: '#4a5568', display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+                        <span>本日完了：<b>{today}</b>件</span>
+                        <span>今月進捗：<b>{completed}</b> / {totalQuota}</span>
+                        <span>正解：<b>{correct}</b>件</span>
+                        <span>不正解：<b>{wrong}</b>件</span>
+                        <span>未入力：<b>{empty}</b>件</span>
+                        <span>正答率：<b style={{ color: '#276749' }}>{accuracyPct}{accuracyPct !== '—' ? '%' : ''}</b></span>
+                        <span>利用者数：<b>{rows.length}</b>人</span>
+                      </div>
+                    </div>
                     <table style={S.table}>
-                      <thead><tr><th style={S.th}>名前</th><th style={S.th}>ログインID</th><th style={S.th}>対象月</th><th style={S.th}>件数</th><th style={S.th}>進捗</th></tr></thead>
+                      <thead><tr><th style={S.th}>名前</th><th style={S.th}>ログインID</th><th style={S.th}>本日</th><th style={S.th}>今月</th><th style={S.th}>正</th><th style={S.th}>誤</th><th style={S.th}>未入力</th><th style={S.th}>正答率</th><th style={S.th}>進捗</th></tr></thead>
                       <tbody>
-                        {rows.map(p => (
+                        {rows.map(p => {
+                          const ans = p.correct_count + p.wrong_count;
+                          const rate = ans > 0 ? ((p.correct_count / ans) * 100).toFixed(1) + '%' : '—';
+                          return (
                           <tr key={p.user_id}>
                             <td style={S.td}>{p.name}</td>
                             <td style={S.td}>{p.login_id}</td>
-                            <td style={S.td}>{p.month}</td>
+                            <td style={S.td}>{p.today_count}</td>
                             <td style={S.td}>{p.completed_count} / {quota}</td>
+                            <td style={S.td}>{p.correct_count}</td>
+                            <td style={S.td}>{p.wrong_count}</td>
+                            <td style={S.td}>{p.empty_count}</td>
+                            <td style={{ ...S.td, fontWeight: 700, color: ans > 0 ? '#276749' : '#a0aec0' }}>{rate}</td>
                             <td style={S.td}>
-                              <div style={{ background: '#e2e8f0', borderRadius: 6, height: 10, width: 160, overflow: 'hidden' }}>
+                              <div style={{ background: '#e2e8f0', borderRadius: 6, height: 10, width: 140, overflow: 'hidden' }}>
                                 <div style={{ background: 'linear-gradient(90deg,#667eea,#764ba2)', height: '100%', width: `${Math.min(100, (p.completed_count / quota) * 100).toFixed(0)}%`, borderRadius: 6 }} />
                               </div>
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
-                </div>
-              );
-            })}
+                );
+              });
+            })()}
           </>
         )}
 
         {/* ===== 回答管理タブ ===== */}
         {tab === 'answers' && (
           <>
-            <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center' }}>
-              <select style={S.rowInput} value={answerFilter} onChange={e => { setAnswerFilter(e.target.value); loadAnswers(admin.id, e.target.value); }}>
-                <option value="">全ユーザー</option>
-                {answerUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+            <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+              <select style={S.rowInput} value={answerClientFilter}
+                onChange={e => { setAnswerClientFilter(e.target.value); loadAnswers(admin.id, answerFilter, e.target.value); }}>
+                <option value="">全クライアント</option>
+                {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
+              <select style={S.rowInput} value={answerFilter}
+                onChange={e => { setAnswerFilter(e.target.value); loadAnswers(admin.id, e.target.value, answerClientFilter); }}>
+                <option value="">全ユーザー</option>
+                {answerUsers
+                  .filter(u => !answerClientFilter || u.client_id === answerClientFilter)
+                  .map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+              <button style={S.csvBtn} onClick={downloadAnswersCsv}>📥 回答CSV</button>
               <span style={{ fontSize: 13, color: '#718096' }}>{answersMsg}</span>
             </div>
             <div style={S.tableWrap}>
               <table style={S.table}>
                 <thead>
                   <tr>
+                    <th style={S.th}>クライアント</th>
                     <th style={S.th}>ユーザー</th>
                     <th style={S.th}>日時</th>
                     <th style={S.th}>カテゴリ</th>
                     <th style={S.th}>回答</th>
                     <th style={S.th}>正解テキスト</th>
                     <th style={S.th}>正誤</th>
-                    <th style={S.th}>修正</th>
+                    <th style={S.th}>正答率</th>
                   </tr>
                 </thead>
                 <tbody>
                   {answers.map(a => {
                     const date = a.created_at ? new Date(a.created_at).toLocaleString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-';
-                    const updDate = a.updated_at ? new Date(a.updated_at).toLocaleString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : null;
                     let ansDisplay = a.answer_text;
                     try { const p = JSON.parse(ansDisplay); if (p.items) ansDisplay = p.items.map((it: { name: string; price: number }) => `${it.name} ¥${Number(it.price).toLocaleString()}`).join('\n'); } catch { /* ignore */ }
                     let correctDisplay = a.correct_text;
                     try { const p = JSON.parse(correctDisplay); if (p.store !== undefined) correctDisplay = `[${p.store}] ${p.date || ''}\n${(p.items || []).map((it: { name: string; price: number }) => `${it.name} ¥${Number(it.price).toLocaleString()}`).join('\n')}`; } catch { /* ignore */ }
                     return (
                       <tr key={a.id}>
+                        <td style={{ ...S.td, fontSize: 12, color: '#4a5568' }}>{a.client_name || '—'}</td>
                         <td style={S.td}>{a.user_name}</td>
-                        <td style={{ ...S.td, fontSize: 12, color: '#718096' }}>{date}</td>
+                        <td style={{ ...S.td, fontSize: 12, color: '#718096' }}>{date}{a.updated_at ? ' ✎' : ''}</td>
                         <td style={{ ...S.td, fontSize: 12, color: '#667eea' }}>{a.task_category}</td>
                         <td style={{ ...S.td, whiteSpace: 'pre-wrap', maxWidth: 180 }}>{ansDisplay}</td>
                         <td style={{ ...S.td, whiteSpace: 'pre-wrap', maxWidth: 180, color: '#718096' }}>{correctDisplay}</td>
@@ -632,40 +866,12 @@ export default function AdminPage() {
                             {a.is_correct ? '正解' : '不正解'}
                           </span>
                         </td>
-                        <td style={{ ...S.td, fontSize: 12, color: '#a0aec0' }}>{updDate ?? '-'}</td>
+                        <td style={{ ...S.td, fontSize: 12, color: '#4a5568' }}>
+                          {a.accuracy != null ? `${(a.accuracy * 100).toFixed(1)}%` : '—'}
+                        </td>
                       </tr>
                     );
                   })}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-
-        {/* ===== クライアントタブ ===== */}
-        {tab === 'clients' && (
-          <>
-            <div style={S.card}>
-              <h3 style={S.cardTitle}>🏢 新規クライアント追加</h3>
-              <div style={S.row}>
-                <input style={S.rowInput} type="text" placeholder="クライアント名・企業名" value={newClientName} onChange={e => setNewClientName(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && addClient()} />
-                <button style={S.addBtn} onClick={addClient}>追加</button>
-              </div>
-              {clientMsg && <p style={clientMsg.includes('⚠️') ? S.err : S.msg}>{clientMsg}</p>}
-            </div>
-            <div style={S.tableWrap}>
-              <table style={S.table}>
-                <thead><tr><th style={S.th}>クライアント名</th><th style={S.th}>作成日</th></tr></thead>
-                <tbody>
-                  {clients.length === 0 ? (
-                    <tr><td style={{ ...S.td, color: '#a0aec0' }} colSpan={2}>クライアントが登録されていません</td></tr>
-                  ) : clients.map(c => (
-                    <tr key={c.id}>
-                      <td style={{ ...S.td, fontWeight: 700 }}>{c.name}</td>
-                      <td style={{ ...S.td, fontSize: 12, color: '#718096' }}>{new Date(c.created_at).toLocaleDateString('ja-JP')}</td>
-                    </tr>
-                  ))}
                 </tbody>
               </table>
             </div>

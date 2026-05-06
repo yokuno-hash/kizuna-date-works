@@ -20,9 +20,12 @@ export async function GET(req: NextRequest) {
     } catch (e: unknown) {
       return NextResponse.json({ error: (e as Error).message }, { status: 403 });
     }
+    // 管理画面のタスク一覧ではオンデマンド生成タスクを除外
+    // （個別の回答に紐付く一過性のレコードのため、テンプレ一覧には不要）
     const { data: tasks, error } = await supabaseAdmin
       .from('tasks')
       .select('*')
+      .eq('is_ondemand', false)
       .order('created_at', { ascending: false });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ tasks });
@@ -41,11 +44,12 @@ export async function GET(req: NextRequest) {
 
   const currentTaskId = prog?.current_task_id;
 
-  // 自分に割り当て済み or 共有タスクの条件
+  // 自分に割り当て済み or 共有タスクの条件（オンデマンドタスクは除外）
   const buildQuery = () =>
     supabaseAdmin
       .from('tasks')
       .select('*')
+      .eq('is_ondemand', false)
       .or(`assigned_user_id.is.null,assigned_user_id.eq.${userId}`);
 
   // 進行中タスクがあればそれを返す
@@ -66,7 +70,8 @@ export async function GET(req: NextRequest) {
   const { data: validTasks, error } = await buildQuery();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!validTasks || validTasks.length === 0) {
-    return NextResponse.json({ error: '有効なタスクがありません' }, { status: 404 });
+    // DB に有効タスクがない → クライアント側のオンデマンドキューで生成する合図
+    return NextResponse.json({ onDemand: true });
   }
 
   const newTask = validTasks[Math.floor(Math.random() * validTasks.length)];

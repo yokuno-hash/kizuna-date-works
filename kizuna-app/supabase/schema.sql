@@ -17,13 +17,17 @@ create table if not exists users (
   login_id text not null unique,
   password text not null, -- SHA-256ハッシュ
   role text not null default 'user' check (role in ('user', 'admin')),
-  client_id uuid references clients(id) on delete set null,
   created_at timestamptz default now()
 );
+
+-- ユーザーにクライアントを関連付け
+alter table users
+  add column if not exists client_id uuid references clients(id) on delete set null;
 
 -- タスクテーブル
 create table if not exists tasks (
   id uuid primary key default gen_random_uuid(),
+
   image_url text default '',
   correct_text text not null default '',
   category text default '',
@@ -33,6 +37,15 @@ create table if not exists tasks (
   assigned_user_id uuid references users(id) on delete set null
 );
 
+-- タスクにクライアントを関連付け（任意）
+alter table tasks
+  add column if not exists client_id uuid references clients(id) on delete set null;
+
+-- オンデマンド生成タスク（送信時に on-the-fly で作成された個別タスク）のマーカー
+-- 管理画面のタスク一覧では除外し、月次削除や監査用に残す
+alter table tasks
+  add column if not exists is_ondemand boolean not null default false;
+
 -- 回答テーブル
 create table if not exists answers (
   id uuid primary key default gen_random_uuid(),
@@ -40,9 +53,16 @@ create table if not exists answers (
   task_id uuid not null references tasks(id) on delete cascade,
   answer_text text default '',
   is_correct boolean not null default false,
-  created_at timestamptz default now(),
-  updated_at timestamptz
+  created_at timestamptz default now()
 );
+
+-- 修正日時を追跡
+alter table answers
+  add column if not exists updated_at timestamptz;
+
+-- 正答率（0.0〜1.0、レシートは品目別、その他は文字列類似度）
+alter table answers
+  add column if not exists accuracy real;
 
 -- 進捗テーブル
 create table if not exists progress (
@@ -63,24 +83,21 @@ create table if not exists settings (
 insert into settings (key, value) values ('monthly_quota', '750')
   on conflict (key) do nothing;
 
--- ============================================================
--- 既存DBへのマイグレーション（追加カラム）
--- 新規インストールの場合は上の create table で作成済みのためスキップされます
--- ============================================================
-alter table answers add column if not exists updated_at timestamptz;
-alter table users add column if not exists client_id uuid references clients(id) on delete set null;
-
 -- インデックス
+create index if not exists idx_users_client_id on users(client_id);
 create index if not exists idx_tasks_assigned_user on tasks(assigned_user_id);
+create index if not exists idx_tasks_client_id on tasks(client_id);
 create index if not exists idx_tasks_created_at on tasks(created_at desc);
 create index if not exists idx_answers_user_id on answers(user_id);
 create index if not exists idx_answers_task_id on answers(task_id);
+create index if not exists idx_answers_user_created on answers(user_id, created_at desc);
 create index if not exists idx_progress_user_month on progress(user_id, month);
 
 -- ============================================================
 -- Row Level Security (RLS) - APIはservice_roleキーを使うので
 -- 今回はRLSを無効化してシンプルに管理します
 -- ============================================================
+alter table clients disable row level security;
 alter table users disable row level security;
 alter table tasks disable row level security;
 alter table answers disable row level security;
@@ -92,5 +109,5 @@ alter table settings disable row level security;
 -- パスワード: admin1234 のSHA-256ハッシュ
 -- ============================================================
 insert into users (name, login_id, password, role)
-values ('管理者', 'admin', 'ac9689e2272427085e35b9d3e3e8bed88cb3434828b43b86fc0596cad4c6e270', 'admin')
+values ('管理者', 'admin', '3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b', 'admin')
 on conflict (login_id) do nothing;

@@ -15,6 +15,17 @@ export function currentMonth(): string {
   return `${y}-${m}`;
 }
 
+// JSTの本日 0:00 を UTC ISO 文字列で返す（answers.created_at との比較用）
+export function jstTodayStartIso(): string {
+  const now = new Date();
+  const jst = new Date(now.getTime() + 9 * 3600 * 1000);
+  const y = jst.getUTCFullYear();
+  const m = jst.getUTCMonth();
+  const d = jst.getUTCDate();
+  const utcMs = Date.UTC(y, m, d, 0, 0, 0) - 9 * 3600 * 1000;
+  return new Date(utcMs).toISOString();
+}
+
 export function calculateAccuracy(correct: string, answer: string): number {
   if (!correct || !answer) return 0;
   const a = correct.trim();
@@ -41,6 +52,29 @@ export function calculateAccuracy(correct: string, answer: string): number {
   const distance = matrix[b.length][a.length];
   const maxLen = Math.max(a.length, b.length);
   return (maxLen - distance) / maxLen;
+}
+
+// レシート品目別の正答率（GAS submitOnDemandAnswer 互換）
+// 各品目について name の Levenshtein 類似度と price の完全一致を平均し、
+// 全品目で平均した値（0.0〜1.0）を返す。
+export function calculateReceiptAccuracy(correctText: string, answerText: string): number {
+  type Item = { name?: string; price?: number };
+  let correctItems: Item[] = [];
+  let answerItems: Item[] = [];
+  try { correctItems = (JSON.parse(correctText)?.items as Item[]) ?? []; } catch { /* ignore */ }
+  try { answerItems = (JSON.parse(answerText)?.items as Item[]) ?? []; } catch { /* ignore */ }
+
+  if (correctItems.length === 0) return 0;
+
+  let totalScore = 0;
+  for (let i = 0; i < correctItems.length; i++) {
+    const c = correctItems[i];
+    const a = answerItems[i] ?? { name: '', price: 0 };
+    const nameScore = calculateAccuracy(String(c.name ?? ''), String(a.name ?? ''));
+    const priceScore = Number(c.price ?? 0) === Number(a.price ?? 0) ? 1.0 : 0.0;
+    totalScore += (nameScore + priceScore) / 2;
+  }
+  return totalScore / correctItems.length;
 }
 
 export const ENCOURAGEMENT = [
