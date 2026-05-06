@@ -56,15 +56,18 @@ export async function GET(req: NextRequest) {
     type ProgRow = { user_id: string; completed_count: number };
     const progMap = new Map((progRows as ProgRow[] ?? []).map((p) => [p.user_id, p.completed_count]));
 
-    type UserRow = { id: string; name: string; login_id: string; client_id: string | null; clients: { name: string } | null };
-    const progress = ((users as UserRow[]) ?? []).map((u) => ({
-      user_id: u.id,
-      name: u.name,
-      login_id: u.login_id,
-      client_name: u.clients?.name ?? null,
-      month,
-      completed_count: progMap.get(u.id) ?? 0,
-    }));
+    const progress = ((users ?? []) as unknown as Array<Record<string, unknown>>).map((u) => {
+      const c = u.clients;
+      const clientName = Array.isArray(c) ? ((c[0] as Record<string,string>)?.name ?? null) : ((c as Record<string,string>)?.name ?? null);
+      return {
+        user_id: u.id,
+        name: u.name,
+        login_id: u.login_id,
+        client_name: clientName,
+        month,
+        completed_count: progMap.get(u.id as string) ?? 0,
+      };
+    });
 
     return NextResponse.json({ progress, quota });
   }

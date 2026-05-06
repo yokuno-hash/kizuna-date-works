@@ -27,15 +27,18 @@ export async function GET(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  type UserRow = { id: string; name: string; login_id: string; role: string; client_id: string | null; clients: { name: string } | null };
-  const mapped = (users as UserRow[] ?? []).map((u) => ({
-    id: u.id,
-    name: u.name,
-    login_id: u.login_id,
-    role: u.role,
-    client_id: u.client_id ?? null,
-    client_name: u.clients?.name ?? null,
-  }));
+  const mapped = ((users ?? []) as unknown as Array<Record<string, unknown>>).map((u) => {
+    const c = u.clients;
+    const clientName = Array.isArray(c) ? ((c[0] as Record<string,string>)?.name ?? null) : ((c as Record<string,string>)?.name ?? null);
+    return {
+      id: u.id,
+      name: u.name,
+      login_id: u.login_id,
+      role: u.role,
+      client_id: u.client_id ?? null,
+      client_name: clientName,
+    };
+  });
 
   return NextResponse.json({ users: mapped });
 }
