@@ -142,11 +142,6 @@ export default function AdminPage() {
   const [aiMsg, setAiMsg] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
 
-  // 月次一括生成
-  const [monthlyCount, setMonthlyCount] = useState(750);
-  const [monthlyMsg, setMonthlyMsg] = useState('');
-  const [monthlyLoading, setMonthlyLoading] = useState(false);
-  const [monthlyProgress, setMonthlyProgress] = useState(0);
 
   // 進捗タブ
   const [progressRows, setProgressRows] = useState<ProgressRow[]>([]);
@@ -362,22 +357,6 @@ export default function AdminPage() {
     setAiLoading(false);
     setAiMsg(`✅ ${saved}件のタスクを登録しました！`);
     loadTasks(admin!.id);
-  };
-
-  // ===== 月次一括生成 =====
-  const generateMonthly = async () => {
-    if (!confirm(`先月分のタスクを削除し、全ユーザーに${monthlyCount}枚ずつのレシートタスクを生成しますか？\n（Vercelでは並列処理するため高速です）`)) return;
-    setMonthlyLoading(true); setMonthlyMsg('⏳ 処理中...'); setMonthlyProgress(10);
-    const res = await fetch('/api/tasks/monthly', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: admin!.id, totalCount: monthlyCount }),
-    });
-    const data = await res.json();
-    setMonthlyLoading(false); setMonthlyProgress(100);
-    if (data.error) { setMonthlyMsg('⚠️ ' + data.error); return; }
-    setMonthlyMsg(`✅ 完了！${data.userCount}名×${monthlyCount}枚 = ${data.totalCreated}件を作成（先月${data.deletedLastMonth}件削除）`);
-    loadTasks(admin!.id);
-    setTimeout(() => setMonthlyProgress(0), 3000);
   };
 
   // ===== 進捗 =====
@@ -661,25 +640,6 @@ export default function AdminPage() {
         {/* ===== タスクタブ ===== */}
         {tab === 'tasks' && (
           <>
-            {/* 月次一括生成 */}
-            <div style={{ ...S.card, border: '2px solid #d6bcfa', background: '#faf5ff' }}>
-              <h3 style={{ ...S.cardTitle, color: '#553c9a' }}>🗓️ 月次一括生成（先月削除→全ユーザーに今月分生成）</h3>
-              <p style={{ fontSize: 13, color: '#718096', marginBottom: 12 }}>先月分のタスクを削除し、全ユーザー分のレシートタスクをGemini APIで並列生成します。</p>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
-                <span style={{ fontSize: 14, color: '#4a5568' }}>生成枚数:</span>
-                <input type="number" value={monthlyCount} onChange={e => setMonthlyCount(parseInt(e.target.value) || 400)} min={1} max={1000}
-                  style={{ width: 90, border: '2px solid #e2e8f0', borderRadius: 8, padding: 8, fontFamily: 'inherit', fontSize: 14 }} />
-                <button style={{ ...S.addBtn, background: 'linear-gradient(135deg,#9f7aea,#6b46c1)', opacity: monthlyLoading ? 0.6 : 1 }}
-                  onClick={generateMonthly} disabled={monthlyLoading}>
-                  🗓️ 月次一括生成 実行
-                </button>
-              </div>
-              <div style={{ background: '#e9d8fd', borderRadius: 8, height: 12, overflow: 'hidden', marginBottom: 8 }}>
-                <div style={{ background: 'linear-gradient(90deg,#9f7aea,#6b46c1)', height: '100%', width: `${monthlyProgress}%`, transition: 'width 0.4s', borderRadius: 8 }} />
-              </div>
-              {monthlyMsg && <p style={monthlyMsg.includes('⚠️') ? S.err : S.msg}>{monthlyMsg}</p>}
-            </div>
-
             {/* タスク追加 */}
             <div style={S.card}>
               <h3 style={S.cardTitle}>➕ 新規タスク追加</h3>
