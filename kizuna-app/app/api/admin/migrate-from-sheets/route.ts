@@ -9,6 +9,10 @@ import { supabaseAdmin } from '@/lib/supabase';
 //
 // 取込順：users → tasks → progress → answers（外部キー依存順）。
 // id を維持して upsert するため、再実行しても重複しない。
+//
+// GAS submitOnDemandAnswer は answers シートの 7列目（index 6）に correctText、
+// 8列目（index 7）に accuracy を書き込む。これらは setupSheets のヘッダー行に
+// 含まれていないため、列インデックスでアクセスできるように _col6 / _col7 として保持する。
 
 type Row = Record<string, string>;
 
@@ -48,20 +52,28 @@ function parseCsv(text: string): string[][] {
   return rows;
 }
 
-async function fetchSheet(spreadsheetId: string, sheetName: string): Promise<Row[]> {
+async function fetchSheet(spreadsheetId: string, sheetName: string): Promise<{ rows: Row[]; headers: string[]; rawText: string }> {
   const res = await fetch(csvUrl(spreadsheetId, sheetName));
   if (!res.ok) throw new Error(`シート "${sheetName}" を取得できません (HTTP ${res.status})。スプレッドシートの共有設定を「リンクを知っている全員（閲覧者）」にしてください。`);
   const text = await res.text();
-  const grid = parseCsv(text);
-  if (grid.length === 0) return [];
-  const headers = grid[0].map((h) => h.trim());
-  return grid.slice(1)
+  // BOM を除去
+  const cleanText = text.replace(/^﻿/, '');
+  const grid = parseCsv(cleanText);
+  if (grid.length === 0) return { rows: [], headers: [], rawText: cleanText };
+  const headers = grid[0].map((h) => h.trim().toLowerCase());
+  const rows = grid.slice(1)
     .filter((r) => r.some((c) => c && c.trim() !== ''))
     .map((r) => {
       const obj: Row = {};
+      // ヘッダーがある列
       headers.forEach((h, i) => { obj[h] = (r[i] ?? '').trim(); });
+      // ヘッダーがない（追加された）列も保持
+      for (let i = headers.length; i < r.length; i++) {
+        obj[`_col${i}`] = (r[i] ?? '').trim();
+      }
       return obj;
     });
+  return { rows, headers, rawText: cleanText };
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -72,14 +84,11 @@ function toBool(v: string): boolean {
   return s === 'true' || s === '1' || s === 'yes';
 }
 
-// "yyyy-MM" 形式に正規化。GAS は文字列で書いてある場合と日付型で書いてある場合がある。
 function toMonth(v: string): string | null {
   if (!v) return null;
   const s = String(v).trim();
-  // すでに yyyy-MM 形式
   const m1 = s.match(/^(\d{4})[-/](\d{1,2})$/);
   if (m1) return `${m1[1]}-${m1[2].padStart(2, '0')}`;
-  // yyyy-MM-dd or ISO
   const d = new Date(s);
   if (!isNaN(d.getTime())) {
     const y = d.getFullYear();
@@ -113,15 +122,21 @@ async function chunkedUpsert<T extends Record<string, unknown>>(
   return { inserted, errors };
 }
 
+type Summary = {
+  fetched: number;
+  upserted: number;
+  errors: string[];
+  headers?: string[];
+  sample?: Row;
+  rejected?: number;
+  rejectReason?: string;
+};
+
 export async function POST(req: NextRequest) {
   const { userId, spreadsheetId, dryRun = false } = await req.json();
 
-  // 管理者チェック
   const { data: adminUser } = await supabaseAdmin
-    .from('users')
-    .select('role')
-    .eq('id', userId)
-    .single();
+    .from('users').select('role').eq('id', userId).single();
   if (!adminUser || adminUser.role !== 'admin') {
     return NextResponse.json({ error: '管理者権限が必要です' }, { status: 403 });
   }
@@ -131,12 +146,14 @@ export async function POST(req: NextRequest) {
   }
   const sid = String(spreadsheetId).trim();
 
-  const summary: Record<string, { fetched: number; upserted: number; errors: string[] }> = {};
+  const summary: Record<string, Summary> = {};
+  const notes: string[] = [];
 
   // ---- 1) users ----
-  let usersRows: Row[];
-  try { usersRows = await fetchSheet(sid, SHEET_NAMES.users); }
+  let usersData: { rows: Row[]; headers: string[] };
+  try { usersData = await fetchSheet(sid, SHEET_NAMES.users); }
   catch (e) { return NextResponse.json({ error: (e as Error).message }, { status: 400 }); }
+  const usersRows = usersData.rows;
 
   const userPayload = usersRows
     .filter((r) => isUuid(r.id) && r.login_id)
@@ -144,10 +161,20 @@ export async function POST(req: NextRequest) {
       id: r.id,
       name: r.name || '(名無し)',
       login_id: r.login_id,
-      password: r.password, // SHA-256 のまま使う
+      password: r.password,
       role: r.role === 'admin' ? 'admin' : 'user',
     }));
-  summary.users = { fetched: usersRows.length, upserted: 0, errors: [] };
+  summary.users = {
+    fetched: usersRows.length,
+    upserted: 0,
+    errors: [],
+    headers: usersData.headers,
+    sample: usersRows[0],
+    rejected: usersRows.length - userPayload.length,
+  };
+  if (userPayload.length === 0 && usersRows.length > 0) {
+    summary.users.rejectReason = 'id 列が UUID 形式でない、または login_id 列が見つからない・空。サンプル行を確認してください。';
+  }
   if (!dryRun && userPayload.length) {
     const r = await chunkedUpsert('users', userPayload, 'id');
     summary.users.upserted = r.inserted;
@@ -155,9 +182,10 @@ export async function POST(req: NextRequest) {
   }
 
   // ---- 2) tasks ----
-  let tasksRows: Row[];
-  try { tasksRows = await fetchSheet(sid, SHEET_NAMES.tasks); }
-  catch { tasksRows = []; }
+  let tasksData: { rows: Row[]; headers: string[] };
+  try { tasksData = await fetchSheet(sid, SHEET_NAMES.tasks); }
+  catch { tasksData = { rows: [], headers: [], rawText: '' } as { rows: Row[]; headers: string[]; rawText: string }; }
+  const tasksRows = tasksData.rows;
 
   const taskPayload = tasksRows
     .filter((r) => isUuid(r.id))
@@ -172,7 +200,14 @@ export async function POST(req: NextRequest) {
       assigned_user_id: isUuid(r.assigned_user_id) ? r.assigned_user_id : null,
       is_ondemand: false,
     }));
-  summary.tasks = { fetched: tasksRows.length, upserted: 0, errors: [] };
+  summary.tasks = {
+    fetched: tasksRows.length,
+    upserted: 0,
+    errors: [],
+    headers: tasksData.headers,
+    sample: tasksRows[0],
+    rejected: tasksRows.length - taskPayload.length,
+  };
   if (!dryRun && taskPayload.length) {
     const r = await chunkedUpsert('tasks', taskPayload, 'id');
     summary.tasks.upserted = r.inserted;
@@ -180,9 +215,10 @@ export async function POST(req: NextRequest) {
   }
 
   // ---- 3) progress ----
-  let progRows: Row[];
-  try { progRows = await fetchSheet(sid, SHEET_NAMES.progress); }
-  catch { progRows = []; }
+  let progData: { rows: Row[]; headers: string[] };
+  try { progData = await fetchSheet(sid, SHEET_NAMES.progress); }
+  catch { progData = { rows: [], headers: [], rawText: '' } as { rows: Row[]; headers: string[]; rawText: string }; }
+  const progRows = progData.rows;
 
   const progPayload = progRows
     .filter((r) => isUuid(r.user_id))
@@ -193,7 +229,17 @@ export async function POST(req: NextRequest) {
       current_task_id: isUuid(r.current_task_id) ? r.current_task_id : null,
     }))
     .filter((r): r is { user_id: string; month: string; completed_count: number; current_task_id: string | null } => r.month !== null);
-  summary.progress = { fetched: progRows.length, upserted: 0, errors: [] };
+  summary.progress = {
+    fetched: progRows.length,
+    upserted: 0,
+    errors: [],
+    headers: progData.headers,
+    sample: progRows[0],
+    rejected: progRows.length - progPayload.length,
+  };
+  if (progPayload.length === 0 && progRows.length > 0) {
+    summary.progress.rejectReason = 'user_id が UUID でない、または month 列が認識できない形式。サンプル行を確認してください。';
+  }
   if (!dryRun && progPayload.length) {
     const r = await chunkedUpsert('progress', progPayload, 'user_id,month');
     summary.progress.upserted = r.inserted;
@@ -201,43 +247,88 @@ export async function POST(req: NextRequest) {
   }
 
   // ---- 4) answers ----
-  let ansRows: Row[];
-  try { ansRows = await fetchSheet(sid, SHEET_NAMES.answers); }
-  catch { ansRows = []; }
+  let ansData: { rows: Row[]; headers: string[] };
+  try { ansData = await fetchSheet(sid, SHEET_NAMES.answers); }
+  catch { ansData = { rows: [], headers: [], rawText: '' } as { rows: Row[]; headers: string[]; rawText: string }; }
+  const ansRows = ansData.rows;
 
-  // GAS の answers は task_id がオンデマンドだと「実体なしの仮UUID」のことがある。
-  // その場合は tasks に存在しないため FK エラーになる。先に tasks を全件取得してフィルタ。
-  const { data: existingTasks } = await supabaseAdmin.from('tasks').select('id');
-  const validTaskIds = new Set((existingTasks ?? []).map((t) => t.id));
+  // 既存の tasks.id を取得
+  const { data: existingTasksRows } = await supabaseAdmin.from('tasks').select('id');
+  const validTaskIds = new Set((existingTasksRows ?? []).map((t) => t.id));
 
-  const ansPayload = ansRows
-    .filter((r) => isUuid(r.id) && isUuid(r.user_id) && isUuid(r.task_id))
-    .filter((r) => validTaskIds.has(r.task_id)) // 仮 task_id は無視
+  // 1段階目：基本フィルタを通る回答を抽出
+  const ansFiltered = ansRows.filter((r) => isUuid(r.id) && isUuid(r.user_id) && isUuid(r.task_id));
+
+  // 2段階目：オンデマンド回答（task_id が存在しない＋ _col6 に correctText がある）
+  // については、シャドウタスクを on-the-fly で作成して FK を解決する。
+  const ondemandShadowTasks: Array<{
+    id: string; image_url: string; correct_text: string; category: string;
+    task_type: string; assigned_user_id: string; is_ondemand: boolean; created_at: string;
+  }> = [];
+  for (const r of ansFiltered) {
+    if (validTaskIds.has(r.task_id)) continue;
+    const ondemandCorrect = r._col6 || r.ondemand_correct_text || '';
+    if (!ondemandCorrect) continue;
+    ondemandShadowTasks.push({
+      id: r.task_id,
+      image_url: '',
+      correct_text: ondemandCorrect,
+      category: 'レシート',
+      task_type: 'receipt',
+      assigned_user_id: r.user_id,
+      is_ondemand: true,
+      created_at: toIso(r.created_at) ?? new Date().toISOString(),
+    });
+    validTaskIds.add(r.task_id);
+  }
+  if (!dryRun && ondemandShadowTasks.length > 0) {
+    const sr = await chunkedUpsert('tasks', ondemandShadowTasks, 'id');
+    notes.push(`オンデマンド回答用にシャドウタスク ${sr.inserted}/${ondemandShadowTasks.length} 件を作成`);
+    summary.tasks.errors.push(...sr.errors);
+  } else if (dryRun && ondemandShadowTasks.length > 0) {
+    notes.push(`オンデマンド回答用にシャドウタスク ${ondemandShadowTasks.length} 件を作成予定`);
+  }
+
+  const ansPayload = ansFiltered
+    .filter((r) => validTaskIds.has(r.task_id))
     .map((r) => ({
       id: r.id,
       user_id: r.user_id,
       task_id: r.task_id,
       answer_text: r.answer_text || '',
       is_correct: toBool(r.is_correct),
-      accuracy: r.accuracy && !isNaN(parseFloat(r.accuracy)) ? parseFloat(r.accuracy) : null,
+      accuracy: (() => {
+        // ヘッダー accuracy がなければ _col7 を見る
+        const v = r.accuracy || r._col7 || '';
+        const f = parseFloat(v);
+        return !isNaN(f) ? f : null;
+      })(),
       created_at: toIso(r.created_at) ?? new Date().toISOString(),
     }));
-  const skippedAnswers = ansRows.length - ansPayload.length;
-  summary.answers = { fetched: ansRows.length, upserted: 0, errors: [] };
+  summary.answers = {
+    fetched: ansRows.length,
+    upserted: 0,
+    errors: [],
+    headers: ansData.headers,
+    sample: ansRows[0],
+    rejected: ansRows.length - ansPayload.length,
+  };
+  if (ansPayload.length === 0 && ansRows.length > 0) {
+    summary.answers.rejectReason = '回答の id/user_id/task_id が UUID でないか、対応するタスクが存在しない。サンプル行を確認してください。';
+  }
   if (!dryRun && ansPayload.length) {
     const r = await chunkedUpsert('answers', ansPayload, 'id');
     summary.answers.upserted = r.inserted;
     summary.answers.errors = r.errors;
   }
 
+  notes.push('パスワードは SHA-256 のまま移行されたので、利用者は元のIDとPWでログインできます');
+  notes.push('移行後、進捗タブの「🔄 過去分の正答率を再計算」を実行すると正答率が埋まります');
+
   return NextResponse.json({
     success: true,
     dryRun,
     summary,
-    notes: [
-      `answers: ${skippedAnswers} 件は task_id が DB に存在しないため除外（GAS のオンデマンド回答など）`,
-      'パスワードは SHA-256 のまま移行されたので、利用者は元のIDとPWでログインできます',
-      '進捗の正答率列を埋めるには、移行後に「過去分の正答率を再計算」を実行してください',
-    ],
+    notes,
   });
 }

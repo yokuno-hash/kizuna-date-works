@@ -407,10 +407,18 @@ export default function AdminPage() {
       if (data.error) { setMigrateMsg('⚠️ ' + data.error); return; }
       const s = data.summary || {};
       const lines = ['users', 'tasks', 'progress', 'answers'].map(k => {
-        const v = s[k] || { fetched: 0, upserted: 0, errors: [] };
-        return `${k}: 取得 ${v.fetched} / 反映 ${v.upserted}${v.errors.length ? ` ⚠️${v.errors.length}件エラー` : ''}`;
+        const v = s[k] || { fetched: 0, upserted: 0, errors: [], rejected: 0 };
+        let line = `${k}: 取得 ${v.fetched} / 反映 ${v.upserted}`;
+        if (v.rejected) line += ` / 除外 ${v.rejected}`;
+        if (v.errors?.length) line += ` ⚠️${v.errors.length}件エラー`;
+        if (v.rejectReason) line += `\n   → ${v.rejectReason}`;
+        if (v.headers?.length) line += `\n   ヘッダー: [${v.headers.join(', ')}]`;
+        if (v.sample) line += `\n   サンプル: ${JSON.stringify(v.sample).slice(0, 250)}`;
+        if (v.errors?.length) line += `\n   エラー: ${v.errors.slice(0, 3).join(' | ')}`;
+        return line;
       });
-      setMigrateMsg(`${dryRun ? '🔍 試算結果' : '✅ 移行完了'}\n` + lines.join('\n'));
+      const noteLines = (data.notes || []).map((n: string) => `📝 ${n}`);
+      setMigrateMsg(`${dryRun ? '🔍 試算結果' : '✅ 移行完了'}\n\n` + lines.join('\n\n') + (noteLines.length ? '\n\n' + noteLines.join('\n') : ''));
       if (!dryRun) {
         loadUsers(admin!.id); loadTasks(admin!.id); loadProgress(admin!.id);
       }
