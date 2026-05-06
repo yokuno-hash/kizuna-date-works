@@ -175,35 +175,75 @@ export async function POST(req: NextRequest) {
   const notes: string[] = [];
 
   // ---- 1) users ----
+  // 既存ユーザーの login_id → id マップを取得（Supabase 初期セットアップで作成済みの
+  // admin など、login_id 重複をうまく処理するため）
+  const { data: existingUsers } = await supabaseAdmin.from('users').select('id, login_id');
+  const existingByLoginId = new Map<string, string>(
+    (existingUsers ?? []).map((u) => [String(u.login_id), String(u.id)])
+  );
+
+  // GAS の id → 最終的な Supabase id のマップ。
+  // login_id がすでに存在するユーザーは Supabase 側の id を採用し、
+  // GAS データの user_id 参照（progress / answers / tasks.assigned_user_id）はこのマップで置換する。
   let usersData: { rows: Row[]; headers: string[] };
   try { usersData = await fetchSheet(sid, SHEET_NAMES.users); }
   catch (e) { return NextResponse.json({ error: (e as Error).message }, { status: 400 }); }
   const usersRows = usersData.rows;
 
-  const userPayload = usersRows
-    .filter((r) => isUuid(r.id) && r.login_id)
-    .map((r) => ({
-      id: r.id,
-      name: r.name || '(名無し)',
-      login_id: r.login_id,
-      password: r.password,
-      role: r.role === 'admin' ? 'admin' : 'user',
-    }));
+  const userIdMap = new Map<string, string>();
+  const usersToInsert: Array<{ id: string; name: string; login_id: string; password: string; role: string }> = [];
+  const usersToUpdate: Array<{ id: string; name: string; password: string; role: string }> = [];
+
+  for (const r of usersRows) {
+    if (!isUuid(r.id) || !r.login_id) continue;
+    const existingId = existingByLoginId.get(r.login_id);
+    if (existingId) {
+      userIdMap.set(r.id, existingId);
+      // 既存ユーザーは Supabase 側の id を維持し、その他フィールドだけ更新
+      usersToUpdate.push({
+        id: existingId,
+        name: r.name || '(名無し)',
+        password: r.password,
+        role: r.role === 'admin' ? 'admin' : 'user',
+      });
+    } else {
+      userIdMap.set(r.id, r.id);
+      usersToInsert.push({
+        id: r.id,
+        name: r.name || '(名無し)',
+        login_id: r.login_id,
+        password: r.password,
+        role: r.role === 'admin' ? 'admin' : 'user',
+      });
+    }
+  }
+
   summary.users = {
     fetched: usersRows.length,
     upserted: 0,
     errors: [],
     headers: usersData.headers,
     sample: usersRows[0],
-    rejected: usersRows.length - userPayload.length,
+    rejected: usersRows.length - usersToInsert.length - usersToUpdate.length,
   };
-  if (userPayload.length === 0 && usersRows.length > 0) {
-    summary.users.rejectReason = 'id 列が UUID 形式でない、または login_id 列が見つからない・空。サンプル行を確認してください。';
-  }
-  if (!dryRun && userPayload.length) {
-    const r = await chunkedUpsert('users', userPayload, 'id');
-    summary.users.upserted = r.inserted;
-    summary.users.errors = r.errors;
+  if (!dryRun) {
+    if (usersToInsert.length) {
+      const r = await chunkedUpsert('users', usersToInsert, 'id');
+      summary.users.upserted += r.inserted;
+      summary.users.errors.push(...r.errors);
+    }
+    // 既存ユーザーは UPDATE（id 経由、login_id は変えない）
+    for (const u of usersToUpdate) {
+      const { error } = await supabaseAdmin
+        .from('users')
+        .update({ name: u.name, password: u.password, role: u.role })
+        .eq('id', u.id);
+      if (error) summary.users.errors.push(`update ${u.id}: ${error.message}`);
+      else summary.users.upserted += 1;
+    }
+    if (usersToUpdate.length > 0) {
+      notes.push(`既存の login_id ${usersToUpdate.length} 件は Supabase 側の id を維持して更新（FK 整合性のため）`);
+    }
   }
 
   // ---- 2) tasks ----
@@ -222,7 +262,10 @@ export async function POST(req: NextRequest) {
       difficulty: r.difficulty || '',
       created_at: toIso(r.created_at) ?? new Date().toISOString(),
       task_type: r.task_type || 'custom',
-      assigned_user_id: isUuid(r.assigned_user_id) ? r.assigned_user_id : null,
+      // ユーザーID マップで GAS id → Supabase id を解決
+      assigned_user_id: isUuid(r.assigned_user_id)
+        ? (userIdMap.get(r.assigned_user_id) ?? r.assigned_user_id)
+        : null,
       is_ondemand: false,
     }));
   summary.tasks = {
@@ -248,10 +291,10 @@ export async function POST(req: NextRequest) {
   const progRaw = progRows
     .filter((r) => isUuid(r.user_id))
     .map((r) => ({
-      user_id: r.user_id,
+      // ユーザーID マップで GAS id → Supabase id を解決
+      user_id: userIdMap.get(r.user_id) ?? r.user_id,
       month: toMonth(r.month),
       completed_count: parseInt(r.completed_count || '0') || 0,
-      // current_task_id 列のヘッダーが空な場合があるので _col3 もフォールバック
       current_task_id: isUuid(r.current_task_id) ? r.current_task_id : (isUuid(r._col3) ? r._col3 : null),
     }))
     .filter((r): r is { user_id: string; month: string; completed_count: number; current_task_id: string | null } => r.month !== null);
@@ -318,7 +361,8 @@ export async function POST(req: NextRequest) {
       correct_text: ondemandCorrect,
       category: 'レシート',
       task_type: 'receipt',
-      assigned_user_id: r.user_id,
+      // ユーザーID マップで GAS id → Supabase id を解決
+      assigned_user_id: userIdMap.get(r.user_id) ?? r.user_id,
       is_ondemand: true,
       created_at: toIso(r.created_at) ?? new Date().toISOString(),
     });
@@ -336,7 +380,8 @@ export async function POST(req: NextRequest) {
     .filter((r) => validTaskIds.has(r.task_id))
     .map((r) => ({
       id: r.id,
-      user_id: r.user_id,
+      // ユーザーID マップで GAS id → Supabase id を解決
+      user_id: userIdMap.get(r.user_id) ?? r.user_id,
       task_id: r.task_id,
       answer_text: r.answer_text || '',
       is_correct: toBool(r.is_correct),
