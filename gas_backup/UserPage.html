@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>作業支援システム</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Noto Sans JP', sans-serif;
+    background: #f0f4f8;
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .screen { display: none; width: 100%; max-width: 520px; padding: 16px; }
+  .screen.active { display: block; }
+
+  /* カード */
+  .card {
+    background: #fff;
+    border-radius: 20px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    padding: 40px 32px;
+  }
+  .card h1 { font-size: 22px; color: #1a202c; margin-bottom: 8px; text-align: center; }
+  .card .subtitle { font-size: 14px; color: #718096; text-align: center; margin-bottom: 32px; }
+
+  /* フォーム */
+  label { display: block; font-size: 14px; font-weight: 700; color: #4a5568; margin-bottom: 6px; }
+  input[type="text"], input[type="password"] {
+    width: 100%; border: 2px solid #e2e8f0; border-radius: 12px;
+    padding: 14px 16px; font-size: 16px; font-family: inherit;
+    transition: border-color 0.2s;
+    outline: none;
+  }
+  input:focus { border-color: #667eea; }
+  .field { margin-bottom: 20px; }
+
+  /* ボタン */
+  .btn {
+    width: 100%; padding: 16px; border-radius: 12px; border: none;
+    font-size: 18px; font-weight: 700; font-family: inherit;
+    cursor: pointer; transition: transform 0.1s, box-shadow 0.2s;
+  }
+  .btn:active { transform: scale(0.98); }
+  .btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    box-shadow: 0 4px 16px rgba(102,126,234,0.4);
+  }
+  .btn-primary:hover { box-shadow: 0 6px 20px rgba(102,126,234,0.5); }
+  .btn-success {
+    background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+    color: #fff;
+    box-shadow: 0 4px 16px rgba(72,187,120,0.4);
+  }
+  .btn-success:hover { box-shadow: 0 6px 20px rgba(72,187,120,0.5); }
+
+  /* エラー */
+  .error-msg { color: #e53e3e; font-size: 14px; margin-top: 12px; text-align: center; }
+
+  /* タスク画面 */
+  .user-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 20px;
+  }
+  .user-name { font-size: 15px; color: #4a5568; font-weight: 700; }
+  .logout-btn {
+    font-size: 13px; color: #a0aec0; background: none; border: none;
+    cursor: pointer; font-family: inherit; padding: 4px 8px;
+    border-radius: 8px; transition: background 0.2s;
+  }
+  .logout-btn:hover { background: #f7fafc; color: #4a5568; }
+
+  .task-image-wrap {
+    width: 100%; aspect-ratio: 16/9;
+    background: #edf2f7; border-radius: 16px;
+    overflow: hidden; margin-bottom: 24px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .task-image-wrap img { width: 100%; height: 100%; object-fit: contain; }
+  .task-image-wrap .no-img { color: #a0aec0; font-size: 14px; }
+
+  .answer-area { margin-bottom: 20px; }
+  .answer-area label { font-size: 16px; color: #2d3748; margin-bottom: 10px; }
+  .answer-area input {
+    font-size: 20px; text-align: center;
+    letter-spacing: 4px; padding: 16px;
+  }
+
+  /* 進捗バー */
+  .progress-wrap { margin: 24px 0; }
+  .progress-label {
+    display: flex; justify-content: space-between;
+    font-size: 14px; color: #718096; margin-bottom: 8px;
+  }
+  .progress-bar-bg {
+    background: #e2e8f0; border-radius: 8px; height: 14px; overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #667eea, #764ba2);
+    border-radius: 8px;
+    transition: width 0.6s ease;
+  }
+
+  /* フィードバック */
+  .feedback {
+    display: none; text-align: center;
+    padding: 24px; border-radius: 16px; margin-bottom: 20px;
+  }
+  .feedback.correct { background: #f0fff4; border: 2px solid #68d391; }
+  .feedback.incorrect { background: #fff5f5; border: 2px solid #fc8181; }
+  .feedback-icon { font-size: 48px; margin-bottom: 8px; }
+  .feedback-msg { font-size: 20px; font-weight: 700; color: #2d3748; margin-bottom: 4px; }
+  .feedback-sub { font-size: 14px; color: #718096; }
+
+  .next-btn { margin-top: 12px; }
+
+  /* ローディング */
+  .loading { text-align: center; color: #a0aec0; font-size: 16px; padding: 40px 0; }
+</style>
+</head>
+<body>
+
+<!-- ===== ログイン画面 ===== -->
+<div id="loginScreen" class="screen active">
+  <div class="card">
+    <h1>🌸 作業支援システム</h1>
+    <p class="subtitle">IDとパスワードを入力してください</p>
+    <div class="field">
+      <label for="loginId">ログインID</label>
+      <input type="text" id="loginId" autocomplete="username" inputmode="text">
+    </div>
+    <div class="field">
+      <label for="loginPass">パスワード</label>
+      <input type="password" id="loginPass" autocomplete="current-password">
+    </div>
+    <button class="btn btn-primary" onclick="login()">ログイン</button>
+    <p id="loginError" class="error-msg"></p>
+  </div>
+</div>
+
+<!-- ===== タスク画面 ===== -->
+<div id="taskScreen" class="screen">
+  <div class="card">
+    <div class="user-header">
+      <span class="user-name" id="userName">さん、こんにちは！</span>
+      <button class="logout-btn" onclick="logout()">ログアウト</button>
+    </div>
+
+    <!-- フィードバック（回答後に表示） -->
+    <div class="feedback" id="feedback">
+      <div class="feedback-icon" id="feedbackIcon"></div>
+      <div class="feedback-msg" id="feedbackMsg"></div>
+      <div class="feedback-sub" id="feedbackSub"></div>
+    </div>
+
+    <!-- タスクコンテンツ -->
+    <div id="taskContent">
+      <div class="loading">タスクを読み込んでいます…</div>
+    </div>
+
+    <!-- 進捗バー -->
+    <div class="progress-wrap">
+      <div class="progress-label">
+        <span>今月の進捗</span>
+        <span id="progressText">- / 400</span>
+      </div>
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="progressFill" style="width:0%"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let currentUser = null;
+  let currentTask = null;
+
+  // ============ 共通 ============
+  function callGas(data) {
+    return new Promise((resolve) => {
+      try {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler((err) => resolve({ error: err.message }))
+          .handleRequest(data);
+      } catch (err) {
+        // ローカル環境(GAS外)で開いた場合など
+        resolve({ error: "GASとの通信に失敗しました。ローカルでHTMLを開いていませんか？(" + err.message + ")" });
+      }
+    });
+  }
+
+  function show(screenId) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(screenId).classList.add('active');
+  }
+
+  // ============ ログイン ============
+  async function login() {
+    const loginId = document.getElementById('loginId').value.trim();
+    const password = document.getElementById('loginPass').value;
+    document.getElementById('loginError').textContent = '';
+
+    if (!loginId || !password) {
+      document.getElementById('loginError').textContent = 'IDとパスワードを入力してください';
+      return;
+    }
+
+    const result = await callGas({ action: 'login', loginId, password });
+    if (result.error) {
+      document.getElementById('loginError').textContent = result.error;
+      return;
+    }
+    console.log("Login result:", result);
+    currentUser = result.user;
+    sessionStorage.setItem('user', JSON.stringify(currentUser));
+
+    if (currentUser.role === 'admin') {
+      console.log("User is admin. Redirecting to admin page...");
+      // 管理者は管理者ページへ
+      google.script.run.withSuccessHandler(url => {
+        window.open(url + '?page=admin', '_top');
+      }).getScriptUrl();
+      return;
+    }
+
+    console.log("User is regular user. Showing task screen...");
+    document.getElementById('userName').textContent = currentUser.name + ' さん、こんにちは！';
+    show('taskScreen');
+    loadProgress();
+    loadTask();
+  }
+
+  function logout() {
+    sessionStorage.removeItem('user');
+    currentUser = null;
+    currentTask = null;
+    document.getElementById('loginId').value = '';
+    document.getElementById('loginPass').value = '';
+    document.getElementById('loginError').textContent = '';
+    show('loginScreen');
+  }
+
+  // ============ タスク ============
+  async function loadTask() {
+    document.getElementById('taskContent').innerHTML = '<div class="loading">タスクを読み込んでいます…</div>';
+    hideFeedback();
+
+    const result = await callGas({ action: 'getTask' });
+    if (result.error) {
+      document.getElementById('taskContent').innerHTML = '<div class="loading">😢 ' + result.error + '</div>';
+      return;
+    }
+
+    currentTask = result.task;
+    const imgHtml = currentTask.image_url
+      ? `<img src="${currentTask.image_url}" alt="タスク画像" onerror="this.style.display='none'">`
+      : `<span class="no-img">画像なし</span>`;
+
+    document.getElementById('taskContent').innerHTML = `
+      <div class="task-image-wrap">${imgHtml}</div>
+      <div class="answer-area">
+        <label for="answerInput">↑ の画像を見て、文字を入力してください</label>
+        <input type="text" id="answerInput" placeholder="ここに入力" autocomplete="off">
+      </div>
+      <button class="btn btn-success" onclick="submitAnswer()">送信する</button>
+    `;
+
+    // Enterキーで送信
+    document.getElementById('answerInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') submitAnswer();
+    });
+    document.getElementById('answerInput').focus();
+  }
+
+  async function submitAnswer() {
+    const answerText = document.getElementById('answerInput').value;
+    if (!answerText.trim()) return;
+
+    const result = await callGas({
+      action: 'submitAnswer',
+      userId: currentUser.id,
+      taskId: currentTask.id,
+      answerText,
+    });
+    if (result.error) { alert(result.error); return; }
+
+    showFeedback(result);
+    updateProgress(result.progress);
+  }
+
+  function showFeedback(result) {
+    const fb = document.getElementById('feedback');
+    fb.className = 'feedback ' + (result.is_correct ? 'correct' : 'incorrect');
+    document.getElementById('feedbackIcon').textContent = result.is_correct ? '⭕' : '❌';
+    document.getElementById('feedbackMsg').textContent = result.message;
+    document.getElementById('feedbackSub').textContent = result.is_correct
+      ? '正解です！次のタスクへ進みましょう'
+      : 'もう一度チャレンジ、または次へ進みましょう';
+
+    fb.style.display = 'block';
+
+    // タスク内容を「次へ」ボタンに切り替え
+    document.getElementById('taskContent').innerHTML = `
+      <button class="btn btn-primary next-btn" onclick="loadTask()">次のタスクへ ➡</button>
+    `;
+  }
+
+  function hideFeedback() {
+    const fb = document.getElementById('feedback');
+    fb.style.display = 'none';
+  }
+
+  // ============ 進捗 ============
+  async function loadProgress() {
+    const result = await callGas({ action: 'getProgress', userId: currentUser.id });
+    if (!result.error) updateProgress({ completed: result.completed_count, total: 400 });
+  }
+
+  function updateProgress(progress) {
+    const pct = Math.min(100, Math.round(progress.completed / progress.total * 100));
+    document.getElementById('progressText').textContent = progress.completed + ' / ' + progress.total;
+    document.getElementById('progressFill').style.width = pct + '%';
+  }
+
+  // ============ 初期化 ============
+  window.addEventListener('load', () => {
+    const saved = sessionStorage.getItem('user');
+    if (saved) {
+      currentUser = JSON.parse(saved);
+      console.log("Restored session for:", currentUser);
+      if (currentUser.role === 'admin') {
+        console.log("Redirecting admin to admin page...");
+        google.script.run.withSuccessHandler(url => {
+          window.open(url + '?page=admin', '_top');
+        }).getScriptUrl();
+        return;
+      }
+      document.getElementById('userName').textContent = currentUser.name + ' さん、こんにちは！';
+      show('taskScreen');
+      loadProgress();
+      loadTask();
+    }
+  });
+</script>
+</body>
+</html>

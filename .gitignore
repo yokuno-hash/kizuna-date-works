@@ -1,0 +1,9 @@
+# Google Apps Script credentials (contains script ID)
+.clasp.json
+
+# Debug logs
+history_debug.txt
+
+# Node modules
+node_modules/
+.next/

@@ -1,0 +1,1280 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>管理者画面 - 作業支援システム</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Zen+Kurenaido&family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Noto Sans JP', sans-serif;
+    background: #f7f8fc;
+    min-height: 100vh;
+  }
+
+  /* ヘッダー */
+  .header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    padding: 16px 32px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .header h1 { font-size: 18px; }
+  .logout-btn {
+    background: rgba(255,255,255,0.2); color: #fff; border: 1px solid rgba(255,255,255,0.4);
+    padding: 8px 16px; border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 14px;
+    transition: background 0.2s;
+  }
+  .logout-btn:hover { background: rgba(255,255,255,0.3); }
+
+  /* ログイン画面 */
+  #loginScreen {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh;
+  }
+  .login-card {
+    background: #fff; border-radius: 20px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    padding: 40px 32px; width: 100%; max-width: 400px;
+  }
+  .login-card h2 { font-size: 20px; color: #1a202c; margin-bottom: 24px; text-align: center; }
+
+  /* タブナビ */
+  .tabs {
+    display: flex; gap: 8px; padding: 16px 32px 0;
+    border-bottom: 2px solid #e2e8f0; background: #fff;
+  }
+  .tab {
+    padding: 12px 20px; border-radius: 8px 8px 0 0; border: none;
+    background: #f7f8fc; cursor: pointer; font-family: inherit; font-size: 14px;
+    font-weight: 700; color: #718096; transition: all 0.2s;
+  }
+  .tab.active { background: #667eea; color: #fff; }
+
+  /* コンテンツ */
+  .main { padding: 24px 32px; max-width: 900px; margin: 0 auto; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* セクション */
+  .section-title {
+    font-size: 18px; font-weight: 700; color: #2d3748; margin-bottom: 16px;
+  }
+
+  /* フォーム部品 */
+  .form-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  .form-row input, .form-row select {
+    flex: 1; min-width: 140px;
+    border: 2px solid #e2e8f0; border-radius: 10px;
+    padding: 10px 12px; font-size: 14px; font-family: inherit; outline: none;
+    transition: border-color 0.2s;
+  }
+  .form-row input:focus, .form-row select:focus { border-color: #667eea; }
+  .btn-add {
+    padding: 10px 20px; border-radius: 10px; border: none;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: #fff; font-weight: 700; font-size: 14px; font-family: inherit;
+    cursor: pointer; white-space: nowrap;
+    transition: opacity 0.2s;
+  }
+  .btn-add:hover { opacity: 0.9; }
+
+  /* テーブル */
+  .table-wrap { overflow-x: auto; border-radius: 12px; background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: #f7f8fc; padding: 12px 16px; text-align: left; color: #4a5568; font-weight: 700; }
+  td { padding: 12px 16px; border-top: 1px solid #f0f4f8; color: #2d3748; }
+  tr:hover td { background: #f7f8fc; }
+
+   /* タスクギャラリー（各カード） */
+   .task-grid {
+     display: grid;
+     grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+     gap: 20px;
+     margin-top: 16px;
+   }
+   .task-card {
+     background: #fff; border-radius: 16px; overflow: hidden;
+     box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+     transition: transform 0.2s, box-shadow 0.2s;
+     border: 1px solid #edf2f7;
+     display: flex; flex-direction: column;
+   }
+   .task-card:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.1); }
+   .task-card-img {
+     width: 100%; aspect-ratio: 16/9; background: #f7fafc;
+     object-fit: contain; border-bottom: 1px solid #edf2f7;
+     cursor: zoom-in;
+   }
+   .task-card-body { padding: 16px; flex: 1; display: flex; flex-direction: column; }
+   .task-card-category { font-size: 11px; font-weight: 700; color: #667eea; text-transform: uppercase; margin-bottom: 4px; }
+   .task-card-text { font-size: 15px; font-weight: 700; color: #1a202c; margin-bottom: 12px; line-height: 1.4; flex: 1; }
+   .task-card-footer {
+     display: flex; justify-content: space-between; align-items: center;
+     padding-top: 12px; border-top: 1px solid #f7fafc;
+   }
+   .task-card-date { font-size: 11px; color: #a0aec0; }
+   .task-card-btns { display: flex; gap: 8px; }
+
+   .btn-mini-del {
+     padding: 6px 10px; border-radius: 8px; border: none;
+     background: #fff5f5; color: #e53e3e; cursor: pointer; font-size: 12px;
+   }
+   .btn-mini-del:hover { background: #fed7d7; }
+   .btn-mini-regen {
+     padding: 6px 10px; border-radius: 8px; border: none;
+     background: #ebf8ff; color: #3182ce; cursor: pointer; font-size: 12px;
+   }
+   .btn-mini-regen:hover { background: #bee3f8; }
+
+   /* 再読み込みボタン */
+   .btn-refresh {
+     padding: 10px 20px; border-radius: 12px; border: 1px solid #e2e8f0;
+     background: #fff; color: #4a5568; cursor: pointer; font-size: 14px; font-weight: 700;
+     display: flex; align-items: center; gap: 8px; transition: all 0.2s;
+   }
+   .btn-refresh:hover { background: #f7fafc; border-color: #cbd5e0; }
+
+  /* パスワードリセット */
+  .btn-reset {
+    padding: 4px 12px; border-radius: 6px; border: 1px solid #90cdf4;
+    background: #ebf8ff; color: #2b6cb0; cursor: pointer; font-size: 12px; font-family: inherit;
+  }
+  .btn-reset:hover { background: #bee3f8; }
+
+  /* CSVボタン */
+  .btn-csv {
+    padding: 8px 16px; border-radius: 10px; border: 1px solid #68d391;
+    background: #f0fff4; color: #276749; cursor: pointer; font-weight: 700; font-size: 13px;
+    margin-bottom: 16px; font-family: inherit;
+  }
+  .btn-csv:hover { background: #c6f6d5; }
+
+  .msg { font-size: 13px; margin-top: 8px; color: #276749; }
+  .err { font-size: 13px; margin-top: 8px; color: #e53e3e; }
+
+  /* フォームカード */
+  .form-card {
+    background: #fff; border-radius: 12px;
+    padding: 20px; margin-bottom: 20px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  }
+  .form-card h3 { font-size: 15px; color: #4a5568; margin-bottom: 12px; }
+
+  /* フォームラベル */
+  .field-label { font-size: 13px; color: #718096; font-weight: 700; margin-bottom: 4px; display: block; }
+
+  /* ローディング */
+  .loading { color: #a0aec0; font-size: 14px; padding: 20px; text-align: center; }
+</style>
+</head>
+<body>
+
+<!-- ===== ログイン ===== -->
+<div id="loginScreen">
+  <div class="login-card">
+    <h2>🔐 管理者ログイン</h2>
+    <div style="margin-bottom:12px">
+      <label class="field-label" for="aLoginId">ログインID</label>
+      <input type="text" id="aLoginId" style="width:100%;border:2px solid #e2e8f0;border-radius:10px;padding:10px 12px;font-size:15px;font-family:inherit;outline:none;" autocomplete="username">
+    </div>
+    <div style="margin-bottom:20px">
+      <label class="field-label" for="aLoginPass">パスワード</label>
+      <input type="password" id="aLoginPass" style="width:100%;border:2px solid #e2e8f0;border-radius:10px;padding:10px 12px;font-size:15px;font-family:inherit;outline:none;" autocomplete="current-password">
+    </div>
+    <button class="btn-add" style="width:100%;padding:14px" onclick="adminLogin()">ログイン</button>
+    <p id="loginErr" class="err"></p>
+  </div>
+</div>
+
+<!-- ===== 管理画面 ===== -->
+<div id="adminScreen" style="display:none">
+  <div class="header">
+    <h1>⚙️ 管理者パネル</h1>
+    <div style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:14px; font-weight:bold; color:#667eea; background:#edf2f7; padding:4px 8px; border-radius:4px;">v2.4</span>
+        <button class="logout-btn" onclick="runMigration()" title="データベース(スプレッドシート)の列を拡張します">📦 データベース更新</button>
+        <button class="logout-btn" onclick="location.reload(true)" title="最新のプログラムを読み込み直します">🔄 強制更新</button>
+        <button class="logout-btn" onclick="logout()">ログアウト</button>
+      </div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('users')">👥 ユーザー</button>
+    <button class="tab" onclick="switchTab('tasks')">📋 タスク</button>
+    <button class="tab" onclick="switchTab('progress')">📊 進捗</button>
+    <button class="tab" onclick="switchTab('answers'); loadAnswers()">📝 回答管理</button>
+  </div>
+  <div class="main">
+
+    <!-- ユーザー管理 -->
+    <div id="panel-users" class="panel active">
+      <div class="form-card">
+        <h3>➕ 新規ユーザー追加</h3>
+        <div class="form-row">
+          <input type="text" id="newName" placeholder="名前">
+          <input type="text" id="newLoginId" placeholder="ログインID">
+          <input type="password" id="newPass" placeholder="パスワード">
+          <select id="newRole">
+            <option value="user">利用者</option>
+            <option value="admin">管理者</option>
+          </select>
+          <button class="btn-add" onclick="addUser()">追加</button>
+        </div>
+        <p id="userMsg" class="msg"></p>
+      </div>
+      <div class="table-wrap" id="userTable"><div class="loading">読み込み中…</div></div>
+    </div>
+
+    <!-- タスク管理 -->
+    <div id="panel-tasks" class="panel">
+      <div class="form-card">
+        <h3>➕ 新規タスク追加</h3>
+        <div class="form-row">
+          <input type="text" id="newImageUrl" placeholder="画像URL（Googleドライブの共有リンク）" style="flex:2">
+          <input type="text" id="newCorrectText" placeholder="正解テキスト">
+          <input type="text" id="newCategory" placeholder="カテゴリ（任意）">
+          <select id="newTaskType" title="タスクタイプ">
+            <option value="custom">標準</option>
+            <option value="receipt">レシート</option>
+            <option value="form">帳票</option>
+            <option value="note">メモ</option>
+          </select>
+          <button class="btn-add" onclick="addTask()">追加</button>
+        </div>
+        <p id="taskMsg" class="msg"></p>
+      </div>
+
+
+      <div class="table-wrap" id="taskTable"><div class="loading">読み込み中…</div></div>
+    </div>
+
+    <!-- 回答管理 -->
+    <div id="panel-answers" class="panel">
+      <div class="form-card" style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+        <span style="font-size:15px; font-weight:700; color:#4a5568;">👤 ユーザーで絞り込み</span>
+        <select id="answerUserFilter" style="border:2px solid #e2e8f0; border-radius:10px; padding:8px 12px; font-size:14px; font-family:inherit; outline:none; min-width:160px;" onchange="loadAnswers()">
+          <option value="">全員</option>
+        </select>
+        <button class="btn-refresh" onclick="loadAnswers()">🔄 最新に更新</button>
+        <button class="btn-refresh" id="summaryBtn" onclick="updateSummary()" style="background:linear-gradient(135deg,#48bb78,#38a169);color:#fff;border:none;">📊 集計シートを更新</button>
+        <span id="summaryMsg" class="msg"></span>
+        <span id="answersMsg" class="msg"></span>
+      </div>
+      <div class="table-wrap" id="answersTable"><div class="loading">読み込み中…</div></div>
+    </div>
+
+    <!-- 進捗管理 -->
+    <div id="panel-progress" class="panel">
+      <!-- ノルマ設定 -->
+      <div style="background:#f7fafc;border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-bottom:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+        <span style="font-size:15px;font-weight:700;color:#4a5568;">📌 月間ノルマ設定</span>
+        <input type="number" id="quotaInput" min="1" style="width:120px;border:2px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:15px;font-family:inherit;outline:none;" placeholder="800">
+        <span style="font-size:14px;color:#718096;">件 / 月</span>
+        <button class="btn-add" onclick="saveQuota()" style="padding:8px 20px;">保存</button>
+        <span id="quotaMsg" style="font-size:13px;color:#48bb78;"></span>
+      </div>
+      <!-- 月次更新 -->
+      <div style="background:#fffbeb;border:1px solid #fbd38d;border-radius:12px;padding:20px;margin-bottom:24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+        <span style="font-size:15px;font-weight:700;color:#744210;">🔄 月次更新</span>
+        <button class="btn-add" onclick="resetMonthly()" style="padding:8px 20px;background:linear-gradient(135deg,#f6ad55,#ed8936);">ワンクリック月次更新（先月削除＋今月追加）</button>
+        <button onclick="installTrigger()" style="padding:8px 20px;border-radius:10px;border:1px solid #fbd38d;background:#fffbeb;color:#744210;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;">⏰ 自動実行トリガー設定（毎月1日）</button>
+        <span id="monthlyMsg" style="font-size:13px;color:#276749;"></span>
+      </div>
+      <button class="btn-csv" onclick="downloadCsv()">📥 CSVダウンロード</button>
+      <div class="table-wrap" id="progressTable"><div class="loading">読み込み中…</div></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  let currentAdmin = null;
+
+  // ===== 画像生成 (Canvas) =====
+  /**
+   * リアルな紙・レシート・手書き画像をCanvasで生成しBase64(JPEG)を返す
+   * ※ JPEGはPNGより大幅にファイルサイズが小さく、GAS転送時の問題を回避する
+   */
+  async function createTextImage(text, taskType) {
+    if (document.fonts) await document.fonts.ready;
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const lines = String(text || '').split(/[\n\\n]/).filter(l => l !== '');
+
+    // 紙の内側にクリップしてはみ出しを防ぐ
+    function clipToPaper(pw, ph) {
+      ctx.beginPath();
+      ctx.rect(-pw/2, -ph/2, pw, ph);
+      ctx.clip();
+    }
+
+    // 1文字ずつ手書き風に描画（回転・揺れ・インク濃淡をキャラクター単位で変える）
+    function drawHandwritten(line, startX, startY, fontSize) {
+      let x = startX;
+      for (let ci = 0; ci < line.length; ci++) {
+        const ch = line[ci];
+        const rot    = (Math.random() - 0.5) * 0.10;
+        const dy     = (Math.random() - 0.5) * 4;
+        const dx     = (Math.random() - 0.5) * 1.5;
+        const fz     = fontSize + (Math.random() - 0.5) * 3;
+        const dark   = Math.floor(Math.random() * 30);
+        const blue   = 50 + Math.floor(Math.random() * 60);
+        const alpha  = 0.65 + Math.random() * 0.30;
+        ctx.font = `${fz}px 'Zen Kurenaido', cursive`;
+        ctx.fillStyle = `rgba(${dark},${dark},${blue},${alpha})`;
+        ctx.save();
+        ctx.translate(x + dx, startY + dy);
+        ctx.rotate(rot);
+        ctx.fillText(ch, 0, 0);
+        ctx.restore();
+        ctx.font = `${fontSize}px 'Zen Kurenaido', cursive`;
+        x += ctx.measureText(ch).width + (Math.random() - 0.3) * 1.5;
+      }
+    }
+
+    // ==============================
+    // レシート（感熱紙）
+    // ==============================
+    if (taskType === 'receipt') {
+      // JSONレシートデータかチェック
+      let receiptData = null;
+      try { receiptData = JSON.parse(text); } catch(e) {}
+
+      const store = receiptData ? (receiptData.store || '') : '';
+      const date = receiptData ? (receiptData.date || '') : '';
+      const items = receiptData && receiptData.items ? receiptData.items : [];
+      const subtotal = items.reduce((sum, it) => sum + Number(it.price || 0), 0);
+      const tax = Math.round(subtotal * 0.1);
+      const total = subtotal + tax;
+
+      // 描画行を構築
+      const drawLines = receiptData ? [
+        { text: store, align: 'center', bold: true, size: 20 },
+        { text: date, align: 'center', bold: false, size: 16 },
+        { type: 'divider' },
+        ...items.map(it => ({ text: String(it.name), right: `¥${Number(it.price).toLocaleString()}`, size: 17 })),
+        { type: 'divider' },
+        { text: '小計', right: `¥${subtotal.toLocaleString()}`, size: 16 },
+        { text: '消費税(10%)', right: `¥${tax.toLocaleString()}`, size: 16 },
+        { text: '合　計', right: `¥${total.toLocaleString()}`, size: 18, bold: true },
+      ] : lines.map(l => ({ text: l, size: 17 }));
+
+      const lineH = 28, padV = 22;
+      const W = 460, H = Math.max(500, drawLines.length * lineH + padV * 2 + 100);
+      canvas.width = W; canvas.height = H;
+
+      ctx.fillStyle = '#3a2516';
+      ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = 'rgba(80,45,15,0.35)'; ctx.lineWidth = 1;
+      for (let i = 0; i < 6; i++) {
+        const x = Math.random() * W;
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + (Math.random()-0.5)*25, H); ctx.stroke();
+      }
+
+      ctx.save();
+      const rAngle = (Math.random() - 0.5) * 5 * Math.PI / 180;
+      ctx.translate(W/2, H/2);
+      ctx.rotate(rAngle);
+      const rpW = 340, rpH = H - 70;
+
+      ctx.shadowColor = 'rgba(0,0,0,0.65)';
+      ctx.shadowBlur = 22; ctx.shadowOffsetX = 8; ctx.shadowOffsetY = 11;
+      const rpg = ctx.createLinearGradient(-rpW/2, -rpH/2, rpW/2, rpH/2);
+      rpg.addColorStop(0, '#fefef8'); rpg.addColorStop(1, '#f6f6e0');
+      ctx.fillStyle = rpg;
+      ctx.fillRect(-rpW/2, -rpH/2, rpW, rpH);
+      ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+
+      clipToPaper(rpW, rpH);
+
+      for (let i = 0; i < 200; i++) {
+        ctx.fillStyle = `rgba(160,150,90,${Math.random() * 0.035})`;
+        ctx.fillRect((Math.random()-0.5)*rpW, (Math.random()-0.5)*rpH, Math.random()*2, 1);
+      }
+
+      ctx.textBaseline = 'middle';
+      let ry = -rpH/2 + padV + lineH / 2;
+
+      for (const dl of drawLines) {
+        if (ry > rpH/2 - lineH) break;
+        if (dl.type === 'divider') {
+          ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+          ctx.lineWidth = 0.8;
+          ctx.setLineDash([4, 3]);
+          ctx.beginPath();
+          ctx.moveTo(-rpW/2 + 12, ry);
+          ctx.lineTo(rpW/2 - 12, ry);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ry += lineH * 0.5;
+          continue;
+        }
+        const fs = dl.size || 17;
+        const ink = `rgba(15,15,10,${0.76 + Math.random() * 0.20})`;
+        ctx.font = `${dl.bold ? 'bold ' : ''}${fs}px 'DotGothic16', monospace`;
+        ctx.fillStyle = ink;
+        if (dl.align === 'center') {
+          ctx.textAlign = 'center';
+          ctx.fillText(dl.text, (Math.random()-0.5)*2, ry);
+        } else if (dl.right) {
+          ctx.textAlign = 'left';
+          ctx.fillText(dl.text, -rpW/2 + 16 + (Math.random()-0.5)*1.5, ry);
+          ctx.textAlign = 'right';
+          ctx.fillText(dl.right, rpW/2 - 16 + (Math.random()-0.5)*1.5, ry);
+        } else {
+          ctx.textAlign = 'left';
+          ctx.fillText(dl.text, -rpW/2 + 16 + (Math.random()-0.5)*1.5, ry);
+        }
+        ry += lineH;
+      }
+
+      ctx.restore();
+
+    // ==============================
+    // 手書きメモ（ノート）
+    // ==============================
+    } else if (taskType === 'note') {
+      const lineH = 44, fontSize = 28, padTop = 58, padBot = 28;
+      const W = 680, npW = 580;
+      const npH = Math.max(400, lines.length * lineH + padTop + padBot);
+      const H = npH + 80;
+      canvas.width = W; canvas.height = H;
+
+      ctx.fillStyle = '#4a3020';
+      ctx.fillRect(0, 0, W, H);
+
+      ctx.save();
+      const nAngle = (Math.random() - 0.5) * 5 * Math.PI / 180;
+      ctx.translate(W/2, H/2);
+      ctx.rotate(nAngle);
+
+      ctx.shadowColor = 'rgba(0,0,0,0.55)';
+      ctx.shadowBlur = 18; ctx.shadowOffsetX = 6; ctx.shadowOffsetY = 9;
+      const npg = ctx.createLinearGradient(-npW/2, -npH/2, npW/2, npH/2);
+      npg.addColorStop(0, '#fdfcef'); npg.addColorStop(0.5, '#faf9e8'); npg.addColorStop(1, '#f5f3e0');
+      ctx.fillStyle = npg;
+      ctx.fillRect(-npW/2, -npH/2, npW, npH);
+      ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+
+      clipToPaper(npW, npH);
+
+      // 紙のテクスチャ・経年シミ
+      for (let i = 0; i < 300; i++) {
+        ctx.fillStyle = `rgba(120,100,60,${Math.random()*0.022})`;
+        ctx.fillRect((Math.random()-0.5)*npW, (Math.random()-0.5)*npH, Math.random()*2+0.5, Math.random()*2+0.5);
+      }
+      for (let i = 0; i < 3; i++) {
+        const sx = (Math.random()-0.5)*npW*0.8, sy = (Math.random()-0.5)*npH*0.8;
+        const r = 3 + Math.random() * 8;
+        const sg = ctx.createRadialGradient(sx, sy, 0, sx, sy, r);
+        sg.addColorStop(0, `rgba(160,130,70,${Math.random()*0.06})`);
+        sg.addColorStop(1, 'rgba(160,130,70,0)');
+        ctx.fillStyle = sg;
+        ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI*2); ctx.fill();
+      }
+
+      // 赤いマージン線
+      ctx.strokeStyle = 'rgba(210,55,55,0.40)'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(-npW/2+54, -npH/2+8); ctx.lineTo(-npW/2+54, npH/2-8); ctx.stroke();
+
+      // 青い横罫線
+      ctx.strokeStyle = 'rgba(70,110,200,0.24)'; ctx.lineWidth = 0.8;
+      for (let yl = -npH/2 + padTop; yl < npH/2 - padBot + lineH; yl += lineH) {
+        ctx.beginPath(); ctx.moveTo(-npW/2+12, yl); ctx.lineTo(npW/2-12, yl); ctx.stroke();
+      }
+
+      // 手書き文字（1文字ずつ）
+      ctx.textBaseline = 'alphabetic';
+      let ny = -npH/2 + padTop - 6;
+      lines.forEach(line => {
+        if (ny > npH/2 - padBot) return;
+        drawHandwritten(line, -npW/2 + 64, ny, fontSize);
+        ny += lineH + (Math.random()-0.5) * 3;
+      });
+
+      ctx.restore();
+
+    // ==============================
+    // 帳票（ビジネスフォーム）
+    // ==============================
+    } else if (taskType === 'form') {
+      const rowH = 36, padTop = 68, padBot = 20;
+      const W = 700, fpW = 630;
+      const fpH = Math.max(420, lines.length * rowH + padTop + padBot);
+      const H = fpH + 70;
+      canvas.width = W; canvas.height = H;
+
+      ctx.fillStyle = '#2c3a48';
+      ctx.fillRect(0, 0, W, H);
+
+      ctx.save();
+      const fAngle = (Math.random() - 0.5) * 3 * Math.PI / 180;
+      ctx.translate(W/2, H/2);
+      ctx.rotate(fAngle);
+
+      ctx.shadowColor = 'rgba(0,0,0,0.5)';
+      ctx.shadowBlur = 16; ctx.shadowOffsetX = 6; ctx.shadowOffsetY = 8;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(-fpW/2, -fpH/2, fpW, fpH);
+      ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+
+      clipToPaper(fpW, fpH);
+
+      ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.lineWidth = 1.8;
+      ctx.strokeRect(-fpW/2+10, -fpH/2+10, fpW-20, fpH-20);
+      ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(-fpW/2+10, -fpH/2+52); ctx.lineTo(fpW/2-10, -fpH/2+52); ctx.stroke();
+      ctx.strokeStyle = 'rgba(0,0,0,0.10)'; ctx.lineWidth = 0.7;
+      for (let yl = -fpH/2 + padTop; yl < fpH/2 - padBot; yl += rowH) {
+        ctx.beginPath(); ctx.moveTo(-fpW/2+14, yl); ctx.lineTo(fpW/2-14, yl); ctx.stroke();
+      }
+
+      ctx.textBaseline = 'top';
+      let fy = -fpH/2 + 16;
+      lines.forEach((line, i) => {
+        if (i > 0 && fy > fpH/2 - padBot) return;
+        if (i === 0) {
+          ctx.font = "bold 21px 'Noto Sans JP', sans-serif";
+          ctx.textAlign = 'center';
+          ctx.fillStyle = 'rgba(0,0,0,0.88)';
+          ctx.fillText(line, 0, fy);
+          fy += padTop - 16;
+        } else {
+          ctx.font = "18px 'Noto Sans JP', sans-serif";
+          ctx.textAlign = 'left';
+          ctx.fillStyle = 'rgba(10,10,10,0.82)';
+          ctx.fillText(line, -fpW/2+22, fy);
+          fy += rowH;
+        }
+      });
+
+      ctx.restore();
+
+    // ==============================
+    // 標準（custom / その他）
+    // ==============================
+    } else {
+      const lineH = 46, fontSize = 28, padTop = 50, padBot = 28;
+      const W = 700, spW = 590;
+      const spH = Math.max(400, lines.length * lineH + padTop + padBot);
+      const H = spH + 80;
+      canvas.width = W; canvas.height = H;
+
+      const bgG = ctx.createLinearGradient(0, 0, W, H);
+      bgG.addColorStop(0, '#3d2b1f'); bgG.addColorStop(1, '#2c1e16');
+      ctx.fillStyle = bgG; ctx.fillRect(0, 0, W, H);
+
+      ctx.save();
+      const sAngle = (Math.random() - 0.5) * 5 * Math.PI / 180;
+      ctx.translate(W/2, H/2);
+      ctx.rotate(sAngle);
+
+      ctx.shadowColor = 'rgba(0,0,0,0.5)';
+      ctx.shadowBlur = 16; ctx.shadowOffsetX = 7; ctx.shadowOffsetY = 9;
+      const ppg = ctx.createRadialGradient(0, 0, 80, 0, 0, spW/2);
+      ppg.addColorStop(0, '#ffffff'); ppg.addColorStop(1, '#f2f2ed');
+      ctx.fillStyle = ppg;
+      ctx.fillRect(-spW/2, -spH/2, spW, spH);
+      ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+
+      clipToPaper(spW, spH);
+
+      for (let i = 0; i < 150; i++) {
+        ctx.fillStyle = `rgba(0,0,0,${Math.random() * 0.012})`;
+        ctx.fillRect((Math.random()-0.5)*spW, (Math.random()-0.5)*spH, 1, 1);
+      }
+
+      ctx.font = `${fontSize}px 'Noto Sans JP', sans-serif`;
+      ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+      ctx.fillStyle = 'rgba(0,30,80,0.82)';
+      let sy = -spH/2 + padTop;
+      lines.forEach(line => {
+        if (sy > spH/2 - padBot) return;
+        ctx.fillText(line, -spW/2 + 42 + (Math.random()-0.5)*2, sy);
+        sy += lineH;
+      });
+
+      ctx.restore();
+    }
+
+    return canvas.toDataURL('image/jpeg', 0.88);
+  }
+
+  // Google Drive の画像URLをログイン不要の公開URLに変換する
+  function toDriveImgUrl(url) {
+    if (!url) return '';
+    if (url.indexOf('lh3.googleusercontent.com') >= 0) return url;
+    var pos = url.indexOf('id=');
+    if (pos >= 0) {
+      var fileId = url.slice(pos + 3).split('&')[0];
+      if (fileId) return 'https://lh3.googleusercontent.com/d/' + fileId;
+    }
+    return url;
+  }
+
+  function callGas(data) {
+    return new Promise((resolve) => {
+      try {
+        google.script.run
+          .withSuccessHandler((res) => resolve(res || {}))
+          .withFailureHandler((err) => resolve({ error: err.message }))
+          .handleRequest(data);
+      } catch (err) {
+        // ローカル環境(GAS外)で開いた場合など
+        resolve({ error: "GASとの通信に失敗しました。ローカルでHTMLを開いていませんか？(" + err.message + ")" });
+      }
+    });
+  }
+
+  // ===== AI生成モード切替 =====
+  // ===== ログイン =====
+  async function adminLogin() {
+    const loginId = document.getElementById('aLoginId').value.trim();
+    const password = document.getElementById('aLoginPass').value;
+    document.getElementById('loginErr').textContent = '';
+    const result = await callGas({ action: 'login', loginId, password });
+    if (result.error) { document.getElementById('loginErr').textContent = result.error; return; }
+    if (result.user.role !== 'admin') { document.getElementById('loginErr').textContent = '管理者権限がありません'; return; }
+    currentAdmin = result.user;
+    sessionStorage.setItem('adminUser', JSON.stringify(currentAdmin));
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('adminScreen').style.display = 'block';
+    loadUsers();
+    loadTasks();
+    loadProgress();
+  }
+
+  function logout() {
+    sessionStorage.removeItem('adminUser');
+    currentAdmin = null;
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('adminScreen').style.display = 'none';
+  }
+
+  // ===== タブ切替 =====
+  function switchTab(name) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById('panel-' + name).classList.add('active');
+  }
+
+  // ===== ユーザー管理 =====
+  async function loadUsers() {
+    const result = await callGas({ action: 'getUsers', userId: currentAdmin.id });
+    if (result.error) { document.getElementById('userTable').innerHTML = '<div class="loading">⚠️ ' + result.error + '</div>'; return; }
+    const rows = result.users.map(u => `
+      <tr>
+        <td>${u.name}</td>
+        <td>${u.login_id}</td>
+        <td>${u.role === 'admin' ? '管理者' : '利用者'}</td>
+        <td>
+          <button class="btn-reset" onclick="resetPw('${u.id}', '${u.name}')">PW変更</button>
+        </td>
+      </tr>`).join('');
+    document.getElementById('userTable').innerHTML = `
+      <table><thead><tr><th>名前</th><th>ログインID</th><th>権限</th><th>操作</th></tr></thead>
+      <tbody>${rows}</tbody></table>`;
+  }
+
+  async function addUser() {
+    const name = document.getElementById('newName').value.trim();
+    const loginId = document.getElementById('newLoginId').value.trim();
+    const password = document.getElementById('newPass').value;
+    const role = document.getElementById('newRole').value;
+    document.getElementById('userMsg').textContent = '';
+    if (!name || !loginId || !password) { document.getElementById('userMsg').textContent = '全項目を入力してください'; return; }
+    const result = await callGas({ action: 'addUser', userId: currentAdmin.id, name, loginId, password, role });
+    if (result.error) { document.getElementById('userMsg').textContent = '⚠️ ' + result.error; return; }
+    document.getElementById('userMsg').textContent = '✅ 追加しました';
+    document.getElementById('newName').value = '';
+    document.getElementById('newLoginId').value = '';
+    document.getElementById('newPass').value = '';
+    loadUsers();
+  }
+
+  async function resetPw(targetUserId, name) {
+    const newPassword = prompt(`${name} さんの新しいパスワードを入力してください`);
+    if (!newPassword) return;
+    const result = await callGas({ action: 'resetPassword', userId: currentAdmin.id, targetUserId, newPassword });
+    alert(result.error ? '⚠️ ' + result.error : '✅ パスワードを変更しました');
+  }
+
+  // ===== タスク管理 =====
+  async function loadTasks() {
+    try {
+      const result = await callGas({ action: 'getTasks', userId: currentAdmin.id });
+      if (result.error) { document.getElementById('taskTable').innerHTML = '<div class="loading">⚠️ ' + result.error + '</div>'; return; }
+      
+      const tasks = result.tasks || [];
+      const cards = tasks
+        .filter(t => t && t.id && t.correct_text)
+        .map(t => {
+          const date = t.created_at ? new Date(t.created_at).toLocaleString('ja-JP', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '-';
+          let displayText = t.correct_text;
+          try {
+            const parsed = JSON.parse(t.correct_text);
+            if (parsed.store) {
+              displayText = `[${parsed.store}] ${parsed.date || ''}\n` + (parsed.items || []).map(it => `${it.name} ¥${Number(it.price).toLocaleString()}`).join('\n');
+            }
+          } catch(e) {}
+          return `
+          <div class="task-card">
+            <img id="img-${t.id}" class="task-card-img" title="クリックで拡大" style="cursor:pointer" onclick="window.open('${toDriveImgUrl(t.image_url)}','_blank')">
+            <div class="task-card-body">
+              <div class="task-card-category">${t.category || '未分類'} | ${t.task_type || '標準'}</div>
+              <div class="task-card-text" style="white-space:pre-wrap;">${displayText}</div>
+              <div class="task-card-footer">
+                <span class="task-card-date">${date}</span>
+                <div class="task-card-btns">
+                  <button class="btn-mini-regen" onclick="regenerateImage('${t.id}')" title="画像を再生成">🔄</button>
+                  <button class="btn-mini-del" onclick="deleteTask('${t.id}')" title="削除">🗑️</button>
+                </div>
+              </div>
+            </div>
+          </div>`
+        }).join('');
+      
+      document.getElementById('taskTable').innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+          <h3 style="font-size:16px; color:#4a5568;">登録済みタスク (${tasks.length}件)</h3>
+          <div style="display:flex; gap:8px;">
+            <button class="btn-refresh" onclick="loadTasks()">🔄 最新の状態に更新</button>
+            <button onclick="deleteAllTasks()" style="padding:7px 14px;border-radius:8px;border:1px solid #fc8181;background:#fff5f5;color:#c53030;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;" title="登録済みタスクをすべて削除">🗑️ 全件削除</button>
+          </div>
+        </div>
+        ${cards ? `<div class="task-grid">${cards}</div>` : '<div class="loading">タスクがありません</div>'}`;
+
+      // 画像URLをDOMで設定（GASサンドボックスのsrc属性制限を回避）
+      tasks.filter(t => t && t.id && t.image_url).forEach(t => {
+        const el = document.getElementById('img-' + t.id);
+        if (el) el.src = toDriveImgUrl(t.image_url);
+      });
+    } catch (e) {
+      document.getElementById('taskTable').innerHTML = '<div class="loading">⚠️ 表示エラー: ' + e.message + '</div>';
+    }
+  }
+
+  async function addTask() {
+    const imageUrl = document.getElementById('newImageUrl').value.trim();
+    const correctText = document.getElementById('newCorrectText').value.trim();
+    const category = document.getElementById('newCategory').value.trim();
+    const taskType = document.getElementById('newTaskType').value;
+    document.getElementById('taskMsg').textContent = '';
+    if (!imageUrl || !correctText) { document.getElementById('taskMsg').textContent = '画像URLと正解テキストは必須です'; return; }
+    const result = await callGas({ action: 'addTask', userId: currentAdmin.id, imageUrl, correctText, category, taskType });
+    if (result.error) { document.getElementById('taskMsg').textContent = '⚠️ ' + result.error; return; }
+    document.getElementById('taskMsg').textContent = '✅ 追加しました';
+    document.getElementById('newImageUrl').value = '';
+    document.getElementById('newCorrectText').value = '';
+    document.getElementById('newCategory').value = '';
+    loadTasks();
+  }
+
+  async function regenerateImage(taskId) {
+    if (!confirm('画像を現在の仕様で再生成しますか？')) return;
+    
+    document.getElementById('taskMsg').textContent = '⏳ 再生成中...';
+    document.getElementById('taskMsg').className = 'msg';
+
+    // 1. ターゲットのテキストを取得（テーブルから取得するか、再取得が必要）
+    // ここでは簡易的に、現在の行のテキストを取得する
+    const rows = document.querySelectorAll('#taskTable tr');
+    let correctText = '';
+    for (const row of rows) {
+        if (row.innerHTML.includes(`'${taskId}'`)) {
+            correctText = row.cells[1].textContent;
+            break;
+        }
+    }
+
+    if (!correctText) {
+        alert('テキストの取得に失敗しました');
+        return;
+    }
+
+    // 2. 画像を作成
+    const taskType = document.getElementById('newTaskType').value; // モーダル等がないので現在の選択値を利用（改善余地あり）
+    const base64Image = await createTextImage(correctText, taskType);
+
+    // 3. サーバーへ送信して更新
+    const result = await callGas({ 
+        action: 'updateTaskImage', 
+        userId: currentAdmin.id, 
+        taskId, 
+        base64Image 
+    });
+    
+    if (result.error) {
+      alert('⚠️ ' + result.error);
+      document.getElementById('taskMsg').textContent = '';
+    } else {
+      document.getElementById('taskMsg').textContent = '✅ 画像を更新しました';
+      loadTasks();
+    }
+  }
+
+  async function deleteTask(taskId) {
+    if (!confirm('このタスクを削除しますか？')) return;
+    const result = await callGas({ action: 'deleteTask', userId: currentAdmin.id, taskId });
+    alert(result.error ? '⚠️ ' + result.error : '✅ 削除しました');
+    loadTasks();
+  }
+
+  async function deleteAllTasks() {
+    const taskCount = document.querySelectorAll('.task-card').length;
+    if (!confirm(`登録済みのタスク ${taskCount} 件をすべて削除しますか？\n※この操作は元に戻せません`)) return;
+    const result = await callGas({ action: 'deleteAllTasks', userId: currentAdmin.id });
+    if (result.error) { alert('⚠️ ' + result.error); return; }
+    alert(`✅ ${result.deleted} 件のタスクを削除しました`);
+    loadTasks();
+  }
+
+  // ===== 進捗管理 =====
+  let progressData = [];
+  let currentQuota = 800;
+
+  async function saveQuota() {
+    const val = parseInt(document.getElementById('quotaInput').value);
+    if (isNaN(val) || val < 1) { document.getElementById('quotaMsg').textContent = '正の整数を入力してください'; return; }
+    const result = await callGas({ action: 'setQuota', userId: currentAdmin.id, quota: val });
+    if (result.error) { document.getElementById('quotaMsg').textContent = '⚠️ ' + result.error; return; }
+    currentQuota = result.quota;
+    document.getElementById('quotaMsg').textContent = '✅ 保存しました（' + currentQuota + '件）';
+    loadProgress();
+  }
+
+  async function loadProgress() {
+    const result = await callGas({ action: 'getAdminProgress', userId: currentAdmin.id });
+    if (result.error) { document.getElementById('progressTable').innerHTML = '<div class="loading">⚠️ ' + result.error + '</div>'; return; }
+    if (result.quota) { currentQuota = result.quota; document.getElementById('quotaInput').value = currentQuota; }
+    progressData = result.progress;
+    const rows = progressData.map(p => `
+      <tr>
+        <td>${p.name}</td>
+        <td>${p.login_id}</td>
+        <td>${p.month}</td>
+        <td>${p.completed_count} / ${currentQuota}</td>
+        <td>
+          <div style="background:#e2e8f0;border-radius:6px;height:10px;width:160px;overflow:hidden">
+            <div style="background:linear-gradient(90deg,#667eea,#764ba2);height:100%;width:${Math.min(100,(p.completed_count/currentQuota*100)).toFixed(0)}%;border-radius:6px"></div>
+          </div>
+        </td>
+      </tr>`).join('');
+    document.getElementById('progressTable').innerHTML = `
+      <table><thead><tr><th>名前</th><th>ログインID</th><th>対象月</th><th>件数</th><th>進捗</th></tr></thead>
+      <tbody>${rows}</tbody></table>`;
+  }
+
+  function downloadCsv() {
+    if (!progressData.length) return;
+    const header = 'name,login_id,month,completed_count\n';
+    const body = progressData.map(p => `${p.name},${p.login_id},${p.month},${p.completed_count}`).join('\n');
+    const blob = new Blob(['\uFEFF' + header + body], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'progress.csv'; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // ===== CSV一括インポート処理 =====
+  async function importCsv_disabled() {
+    const fileInput = document.getElementById('csvFile');
+    if (!fileInput.files.length) {
+      return;
+    }
+    const file = fileInput.files[0];
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+      const text = e.target.result;
+      const lines = text.split('\n').filter(l => l.trim() !== '');
+      const tasksData = [];
+
+      for (const line of lines) {
+        const cols = line.split(',').map(col => col.trim().replace(/^"|"$/g, ''));
+        if (cols.length >= 2 && cols[0] !== '') {
+          tasksData.push({
+            imageUrl: cols[0],
+            correctText: cols[1],
+            category: cols[2] || ''
+          });
+        }
+      }
+
+      if (tasksData.length === 0) {
+        document.getElementById('csvMsg').className = 'err';
+        document.getElementById('csvMsg').textContent = '⚠️ 有効なデータがありませんでした';
+        return;
+      }
+
+      const result = await callGas({ action: 'addTasksBulk', userId: currentAdmin.id, tasksData });
+
+      if (result.error) {
+        document.getElementById('csvMsg').className = 'err';
+        document.getElementById('csvMsg').textContent = '⚠️ ' + result.error;
+      } else {
+        document.getElementById('csvMsg').className = 'msg';
+        document.getElementById('csvMsg').textContent = `✅ ${result.count}件のタスクを一括追加しました！`;
+        fileInput.value = '';
+        loadTasks();
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  // ===== AI生成処理 =====
+  async function generateAI_disabled() {
+    const mode = 'auto';
+    const category = '';
+    const taskType = 'receipt';
+    const count = 5;
+    const btn = null;
+    const msg = null;
+
+    if (mode === 'auto' && !category) {
+      msg.className = 'err';
+      msg.textContent = 'カテゴリを入力してください';
+      return;
+    }
+    if (mode === 'manual') {
+      const manualStore = document.getElementById('manualStore').value.trim();
+      const manualItems = document.querySelectorAll('#manualReceiptBody .mr-name');
+      let hasItem = false;
+      manualItems.forEach(el => { if (el.value.trim()) hasItem = true; });
+      if (!manualStore || !hasItem) {
+        msg.className = 'err';
+        msg.textContent = '店名と品目を入力してください';
+        return;
+      }
+    }
+
+    const confirmMsg = mode === 'auto'
+      ? `「${category}」のレシート課題を${count}件、AIで画像生成して登録しますか？`
+      : `入力されたレシートを画像生成して登録しますか？`;
+
+    if (confirm(confirmMsg + '\n(生成には数分かかる場合があります)')) {
+      btn.disabled = true;
+      btn.style.opacity = '0.6';
+      msg.className = 'msg';
+      msg.textContent = '⏳ 準備中...';
+
+      try {
+        let texts = [];
+        if (mode === 'auto') {
+          msg.textContent = '⏳ Geminiでテキストを生成中...';
+          const res = await callGas({ 
+            action: 'getTextsForTasks', 
+            userId: currentAdmin.id, 
+            category, 
+            count 
+          });
+          if (res.error) throw new Error(res.error);
+          texts = res.texts;
+        } else {
+          // 直接入力（レシートテーブル）
+          const store = document.getElementById('manualStore').value.trim();
+          const date = document.getElementById('manualDate').value.trim();
+          const rows = document.querySelectorAll('#manualReceiptBody tr');
+          const manualItems = [];
+          rows.forEach(row => {
+            const name = row.querySelector('.mr-name').value.trim();
+            const price = parseInt(row.querySelector('.mr-price').value) || 0;
+            if (name) manualItems.push({ name, price });
+          });
+          texts = [JSON.stringify({ store, date, items: manualItems })];
+        }
+
+        if (texts.length === 0) throw new Error('テキストが生成されませんでした');
+
+        msg.textContent = `⏳ 画像を生成・保存中 (0/${texts.length})`;
+        
+        let successCount = 0;
+        let lastError = '';
+        // モードに応じたtaskTypeの決定
+        const currentTaskType = mode === 'auto' ? taskType : 'custom';
+
+        for (let i = 0; i < texts.length; i++) {
+          const text = texts[i];
+          // 第2引数にタスクタイプを渡してリアルな画像を生成
+          const base64Image = await createTextImage(text, currentTaskType);
+
+          const saveRes = await callGas({
+            action: 'saveTaskWithImage',
+            userId: currentAdmin.id,
+            base64Image: base64Image,
+            correctText: text,
+            category: (mode === 'auto' ? category : '直接入力'),
+            taskType: currentTaskType
+          });
+
+          if (!saveRes.error) {
+            successCount++;
+          } else {
+            lastError = saveRes.error;
+            console.error(`[AI生成] 保存エラー (${i+1}件目):`, saveRes.error);
+          }
+          msg.textContent = `⏳ 画像を生成・保存中 (${successCount}/${texts.length})`;
+        }
+
+        // 全件失敗した場合はエラーを表示して原因を把握できるようにする
+        if (successCount === 0 && lastError) {
+          throw new Error(lastError);
+        }
+
+        if (mode === 'auto') {
+          document.getElementById('aiCategory').value = '';
+        } else {
+          document.getElementById('manualStore').value = '';
+          document.getElementById('manualDate').value = '';
+          document.getElementById('manualReceiptBody').innerHTML = `<tr>
+            <td style="border:1px solid #e2e8f0;"><input type="text" class="mr-name" placeholder="品目名" style="width:100%;border:none;padding:6px;font-family:inherit;outline:none;"></td>
+            <td style="border:1px solid #e2e8f0;"><input type="number" class="mr-price" placeholder="0" style="width:100%;border:none;padding:6px;font-family:inherit;outline:none;"></td>
+            <td style="border:1px solid #e2e8f0;text-align:center;"><button onclick="removeManualRow(this)" style="border:none;background:#fff5f5;color:#e53e3e;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:13px;">✕</button></td>
+          </tr>`;
+        }
+        
+        // 生成したタスクを即座にUIに反映 (v2.3.1)
+        await loadTasks();
+        msg.className = 'msg';
+        msg.textContent = `✅ ${successCount}件の画像を生成・登録しました！`;
+
+      } catch (err) {
+        msg.className = 'err';
+        msg.textContent = '⚠️ ' + err.message;
+      } finally {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+      }
+    }
+  }
+
+  // ===== 集計シート更新 =====
+  async function updateSummary() {
+    const btn = document.getElementById('summaryBtn');
+    const msg = document.getElementById('summaryMsg');
+    btn.disabled = true;
+    msg.textContent = '⏳ 更新中…';
+    const result = await callGas({ action: 'updateSummary', userId: currentAdmin.id });
+    btn.disabled = false;
+    msg.textContent = result.error ? '⚠️ ' + result.error : '✅ 集計シートを更新しました';
+  }
+
+  // ===== 回答管理 =====
+  async function loadAnswers() {
+    const targetUserId = document.getElementById('answerUserFilter').value;
+    document.getElementById('answersTable').innerHTML = '<div class="loading">読み込み中…</div>';
+    const result = await callGas({ action: 'getAdminAnswers', userId: currentAdmin.id, targetUserId: targetUserId || null });
+    if (result.error) {
+      document.getElementById('answersTable').innerHTML = '<div class="loading" style="color:#e53e3e;">⚠️ エラー: ' + result.error + '</div>';
+      document.getElementById('answersMsg').textContent = '';
+      return;
+    }
+
+    // ユーザーフィルターを更新（初回のみ）
+    const filterEl = document.getElementById('answerUserFilter');
+    if (result.users && filterEl.options.length <= 1) {
+      result.users.forEach(u => {
+        const opt = document.createElement('option');
+        opt.value = u.id;
+        opt.textContent = u.name;
+        filterEl.appendChild(opt);
+      });
+    }
+
+    const answers = result.answers || [];
+    if (answers.length === 0) {
+      document.getElementById('answersTable').innerHTML = '<div class="loading">回答データがありません</div>';
+      return;
+    }
+
+    const rows = answers.map((a, idx) => {
+      const date = a.created_at ? new Date(a.created_at).toLocaleString('ja-JP', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '-';
+      const correct = (a.is_correct === true || a.is_correct === 'TRUE' || a.is_correct === 'true' || a.is_correct === 1);
+      const pctLabel = (a.accuracy !== null && a.accuracy !== undefined)
+        ? `<br><span style="font-size:11px;color:#718096;">${Math.round(a.accuracy * 100)}%</span>`
+        : '';
+      const badge = correct
+        ? `<span style="background:#c6f6d5;color:#276749;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:700;">正解</span>${pctLabel}`
+        : `<span style="background:#fed7d7;color:#c53030;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:700;">不正解</span>${pctLabel}`;
+      // レシート回答（JSON）を人間が読める形式に変換
+      let answerDisplay = String(a.answer_text || '');
+      try {
+        const parsed = JSON.parse(answerDisplay);
+        if (parsed.items) {
+          answerDisplay = parsed.items.map(it => `${it.name}  ¥${Number(it.price).toLocaleString()}`).join('\n');
+        }
+      } catch(e) { /* 通常テキストはそのまま */ }
+      let correctDisplay = String(a.correct_text || '');
+      try {
+        const parsed = JSON.parse(correctDisplay);
+        if (parsed.store !== undefined) {
+          correctDisplay = `[${parsed.store}] ${parsed.date || ''}\n` +
+            (parsed.items || []).map(it => `${it.name}  ¥${Number(it.price).toLocaleString()}`).join('\n');
+        }
+      } catch(e) {}
+      const answerEscaped = answerDisplay.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const correctEscaped = correctDisplay.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const imgId = 'ans-img-' + idx;
+      // 表示用レシートテキスト: correct_text優先、なければanswer_textで代替
+      let receiptJson = null;
+      if (a.correct_text) {
+        try { const p = JSON.parse(a.correct_text); if (p.store || p.items) receiptJson = a.correct_text; } catch(e) {}
+      }
+      if (!receiptJson && a.answer_text) {
+        try { const p = JSON.parse(a.answer_text); if (p.items) receiptJson = a.answer_text; } catch(e) {}
+      }
+      let imgCell;
+      if (a.image_url) {
+        imgCell = `<img id="${imgId}" style="width:100px;height:64px;object-fit:contain;border-radius:6px;background:#f7fafc;cursor:zoom-in;" onclick="window.open(this.src,'_blank')" title="クリックで拡大">`;
+      } else if (receiptJson) {
+        imgCell = `<canvas id="${imgId}" width="100" height="64" style="border-radius:6px;cursor:zoom-in;" title="クリックで拡大"></canvas>`;
+      } else {
+        imgCell = '<span style="color:#a0aec0;font-size:12px;">なし</span>';
+      }
+      return { html: `<tr>
+        <td>${a.user_name}</td>
+        <td style="font-size:12px;color:#718096;">${date}</td>
+        <td><span style="font-size:12px;color:#667eea;">${a.task_category}</span></td>
+        <td>${imgCell}</td>
+        <td style="color:#2d3748;white-space:pre-wrap;max-width:180px;">${answerEscaped}</td>
+        <td style="color:#718096;white-space:pre-wrap;max-width:180px;">${correctEscaped}</td>
+        <td>${badge}</td>
+      </tr>`, imgId, imageUrl: a.image_url, receiptText: receiptJson };
+    });
+
+    document.getElementById('answersTable').innerHTML = `
+      <table>
+        <thead><tr><th>ユーザー</th><th>日時</th><th>カテゴリ</th><th>画像</th><th>回答</th><th>正解テキスト</th><th>正誤</th></tr></thead>
+        <tbody>${rows.map(r => r.html).join('')}</tbody>
+      </table>`;
+
+    // 画像URLをDOMで設定（サンドボックス制限を回避）
+    rows.forEach(r => {
+      if (r.imageUrl) {
+        const el = document.getElementById(r.imgId);
+        if (el) el.src = toDriveImgUrl(r.imageUrl);
+      }
+    });
+
+    // オンデマンド回答のサムネイルをキャンバスで描画
+    rows.filter(r => r.receiptText).forEach(r => {
+      const canvas = document.getElementById(r.imgId);
+      if (!canvas) return;
+      renderReceiptThumbnail(canvas, r.receiptText);
+      canvas.onclick = () => showReceiptModal(r.receiptText);
+    });
+
+    document.getElementById('answersMsg').textContent = `${answers.length}件`;
+  }
+
+  // ===== オンデマンドレシートのキャンバスサムネイル =====
+  function renderReceiptThumbnail(canvas, text) {
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    let rd = null;
+    try { rd = JSON.parse(text); } catch(e) {}
+    const store = rd ? (rd.store || '') : text;
+    const items = rd && rd.items ? rd.items : [];
+    ctx.fillStyle = '#3a2516'; ctx.fillRect(0,0,W,H);
+    const g = ctx.createLinearGradient(8,4,W-8,H-4);
+    g.addColorStop(0,'#fefef8'); g.addColorStop(1,'#f6f6e0');
+    ctx.fillStyle = g; ctx.fillRect(8,4,W-16,H-8);
+    ctx.fillStyle = 'rgba(15,15,10,0.8)';
+    ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+    ctx.fillText(store.length > 12 ? store.slice(0,12)+'…' : store, W/2, 16);
+    ctx.font = '8px monospace'; ctx.textAlign = 'left';
+    let y = 28;
+    items.slice(0,4).forEach(it => {
+      if (y > H-12) return;
+      const name = String(it.name||'').slice(0,8);
+      const price = '¥'+Number(it.price||0).toLocaleString();
+      ctx.fillText(name, 12, y);
+      ctx.textAlign='right'; ctx.fillText(price, W-12, y); ctx.textAlign='left';
+      y += 10;
+    });
+    if (items.length > 4) { ctx.fillStyle='rgba(15,15,10,0.5)'; ctx.font='7px monospace'; ctx.fillText('…', 12, y); }
+  }
+
+  function showReceiptModal(text) {
+    const existing = document.getElementById('receiptModal');
+    if (existing) existing.remove();
+    const modal = document.createElement('div');
+    modal.id = 'receiptModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9999;';
+    modal.onclick = () => modal.remove();
+    const canvas = document.createElement('canvas');
+    canvas.width = 340; canvas.height = 480;
+    canvas.style.cssText = 'border-radius:12px;cursor:default;';
+    canvas.onclick = e => e.stopPropagation();
+    modal.appendChild(canvas);
+    document.body.appendChild(modal);
+    // フルサイズ描画（UserPage版の簡易移植）
+    const ctx = canvas.getContext('2d');
+    let rd = null;
+    try { rd = JSON.parse(text); } catch(e) {}
+    const store = rd ? (rd.store||'') : text;
+    const date  = rd ? (rd.date ||'') : '';
+    const items = rd && rd.items ? rd.items : [];
+    const sub   = items.reduce((s,it)=>s+Number(it.price||0),0);
+    const tax   = Math.round(sub*0.1);
+    const W=340,H=480;
+    ctx.fillStyle='#3a2516'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#fefef8'; ctx.fillRect(20,10,W-40,H-20);
+    ctx.fillStyle='rgba(15,15,10,0.85)'; ctx.textBaseline='middle';
+    ctx.font='bold 14px monospace'; ctx.textAlign='center'; ctx.fillText(store,W/2,36);
+    ctx.font='11px monospace'; ctx.fillText(date,W/2,56);
+    ctx.strokeStyle='rgba(0,0,0,0.2)'; ctx.setLineDash([4,3]);
+    ctx.beginPath(); ctx.moveTo(30,68); ctx.lineTo(W-30,68); ctx.stroke(); ctx.setLineDash([]);
+    let y=88;
+    items.forEach(it=>{
+      ctx.font='12px monospace'; ctx.textAlign='left'; ctx.fillText(String(it.name||''),30,y);
+      ctx.textAlign='right'; ctx.fillText('¥'+Number(it.price||0).toLocaleString(),W-30,y); y+=22;
+    });
+    ctx.strokeStyle='rgba(0,0,0,0.2)'; ctx.setLineDash([4,3]);
+    ctx.beginPath(); ctx.moveTo(30,y+2); ctx.lineTo(W-30,y+2); ctx.stroke(); ctx.setLineDash([]);
+    y+=16;
+    [['小計','¥'+sub.toLocaleString()],['消費税(10%)','¥'+tax.toLocaleString()],['合　計','¥'+(sub+tax).toLocaleString()]].forEach(([label,val],i)=>{
+      ctx.font=(i===2?'bold ':'')+'12px monospace'; ctx.textAlign='left'; ctx.fillText(label,30,y);
+      ctx.textAlign='right'; ctx.fillText(val,W-30,y); y+=20;
+    });
+  }
+
+  // ===== 月次更新 =====
+  async function resetMonthly() {
+    if (!confirm('先月分のprogress・answersを削除し、今月分を全ユーザーに追加しますか？\n※この操作は元に戻せません')) return;
+    document.getElementById('monthlyMsg').textContent = '⏳ 処理中...';
+    const result = await callGas({ action: 'resetMonthlyData', userId: currentAdmin.id });
+    document.getElementById('monthlyMsg').textContent = result.error ? '⚠️ ' + result.error : '✅ ' + result.message;
+    loadProgress();
+  }
+
+  async function installTrigger() {
+    if (!confirm('毎月1日 0時に自動リセットするトリガーを設定しますか？\n（GASプロジェクトのトリガーに登録されます）')) return;
+    const result = await callGas({ action: 'installMonthlyTrigger', userId: currentAdmin.id });
+    alert(result.error ? '⚠️ ' + result.error : '✅ ' + result.message);
+  }
+
+  async function runMigration() {
+    if (!confirm('スプレッドシートに「task_type」列を追加しますか？\n(既に存在する場合は何もしません)')) return;
+    const result = await callGas({ action: 'migrateData', userId: currentAdmin.id });
+    alert(result.message || result.error);
+    loadTasks();
+  }
+
+  // ===== 初期化 =====
+  window.addEventListener('load', () => {
+    const saved = sessionStorage.getItem('adminUser');
+    if (saved) {
+      currentAdmin = JSON.parse(saved);
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('adminScreen').style.display = 'block';
+      loadUsers(); loadTasks(); loadProgress();
+    }
+  });
+</script>
+</body>
+</html>

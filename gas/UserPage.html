@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>作業支援システム</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Zen+Kurenaido&family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Noto Sans JP', sans-serif; background: #f0f4f8; min-height: 100vh; }
+
+  /* ===== ログイン画面 ===== */
+  #loginScreen {
+    display: none; min-height: 100vh;
+    align-items: center; justify-content: center;
+  }
+  #loginScreen.active { display: flex; }
+  .login-card {
+    background: #fff; border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.10);
+    padding: 48px 56px; width: 420px;
+  }
+  .login-card h1 { font-size: 22px; color: #1a202c; margin-bottom: 8px; text-align: center; }
+  .login-card .subtitle { font-size: 14px; color: #718096; text-align: center; margin-bottom: 32px; }
+  .field { margin-bottom: 20px; }
+  label { display: block; font-size: 13px; font-weight: 700; color: #4a5568; margin-bottom: 6px; }
+  input[type="text"], input[type="password"] {
+    width: 100%; border: 2px solid #e2e8f0; border-radius: 8px;
+    padding: 10px 14px; font-size: 15px; font-family: inherit;
+    transition: border-color 0.2s; outline: none;
+  }
+  input:focus { border-color: #667eea; }
+  .error-msg { color: #e53e3e; font-size: 13px; margin-top: 10px; text-align: center; }
+
+  /* ===== タスク画面（PC全幅レイアウト） ===== */
+  #taskScreen { display: none; flex-direction: column; min-height: 100vh; }
+  #taskScreen.active { display: flex; }
+
+  /* ヘッダーバー */
+  .pc-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff; padding: 12px 32px;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .pc-header-title { font-size: 17px; font-weight: 700; }
+  .pc-header-right { display: flex; align-items: center; gap: 24px; }
+  .user-name { font-size: 14px; font-weight: 700; }
+  .logout-btn {
+    font-size: 13px; color: rgba(255,255,255,0.85); background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.35); cursor: pointer; font-family: inherit;
+    padding: 6px 14px; border-radius: 6px; transition: background 0.2s;
+  }
+  .logout-btn:hover { background: rgba(255,255,255,0.25); }
+
+  /* 進捗バー（ヘッダー内） */
+  .progress-inline { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+  .progress-inline span { white-space: nowrap; }
+  .progress-bar-bg {
+    width: 200px; background: rgba(255,255,255,0.3);
+    border-radius: 6px; height: 10px; overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%; background: #fff; border-radius: 6px; transition: width 0.6s ease;
+  }
+
+  /* メインコンテンツ：左右2カラム */
+  .pc-main {
+    flex: 1; display: flex; gap: 0; overflow: hidden;
+  }
+
+  /* 左パネル：画像 */
+  .panel-image {
+    flex: 1.4; background: #1e2535;
+    display: flex; align-items: center; justify-content: center;
+    padding: 32px; min-height: 0;
+  }
+  .task-image-wrap {
+    width: 100%; height: 100%; max-height: calc(100vh - 56px);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .task-image-wrap img {
+    max-width: 100%; max-height: 100%; object-fit: contain;
+    border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+  .task-image-wrap .no-img { color: #718096; font-size: 15px; }
+
+  /* 右パネル：入力エリア */
+  .panel-input {
+    width: 420px; flex-shrink: 0;
+    background: #fff; padding: 36px 32px;
+    display: flex; flex-direction: column; gap: 20px;
+    overflow-y: auto; border-left: 1px solid #e2e8f0;
+  }
+  .panel-input-title { font-size: 15px; font-weight: 700; color: #4a5568; }
+
+  /* フィードバック */
+  .feedback {
+    display: none; text-align: center;
+    padding: 20px; border-radius: 12px;
+  }
+  .feedback.correct { background: #f0fff4; border: 2px solid #68d391; }
+  .feedback.incorrect { background: #fff5f5; border: 2px solid #fc8181; }
+  .feedback-icon { font-size: 40px; margin-bottom: 6px; }
+  .feedback-msg { font-size: 18px; font-weight: 700; color: #2d3748; margin-bottom: 4px; }
+  .feedback-sub { font-size: 13px; color: #718096; }
+
+  /* タスクコンテンツ */
+  #taskContent { display: flex; flex-direction: column; gap: 16px; flex: 1; }
+  .answer-area label { font-size: 14px; color: #2d3748; margin-bottom: 8px; }
+  .answer-area input[type="text"] { font-size: 18px; text-align: left; letter-spacing: 2px; padding: 12px 14px; }
+
+  /* ボタン */
+  .btn {
+    width: 100%; padding: 13px; border-radius: 10px; border: none;
+    font-size: 16px; font-weight: 700; font-family: inherit;
+    cursor: pointer; transition: transform 0.1s, box-shadow 0.2s;
+  }
+  .btn:active { transform: scale(0.98); }
+  .btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff; box-shadow: 0 4px 14px rgba(102,126,234,0.4);
+  }
+  .btn-primary:hover { box-shadow: 0 6px 18px rgba(102,126,234,0.5); }
+  .btn-success {
+    background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+    color: #fff; box-shadow: 0 4px 14px rgba(72,187,120,0.4);
+  }
+  .btn-success:hover { box-shadow: 0 6px 18px rgba(72,187,120,0.5); }
+  .btn-skip {
+    width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0;
+    font-size: 13px; font-weight: 700; font-family: inherit;
+    background: #fff; color: #a0aec0; cursor: pointer; transition: all 0.2s;
+  }
+  .btn-skip:hover { background: #f7fafc; color: #4a5568; }
+  .next-btn { margin-top: 0; }
+
+  /* ローディング */
+  .loading { text-align: center; color: #a0aec0; font-size: 15px; padding: 40px 0; }
+
+  /* 画像生成中オーバーレイ（2回目以降） */
+  .image-generating-overlay {
+    position: absolute; inset: 0;
+    background: rgba(30, 37, 53, 0.55);
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 4px;
+  }
+  .image-generating-overlay .spinner {
+    width: 44px; height: 44px;
+    border: 4px solid rgba(255,255,255,0.25);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .panel-image { position: relative; }
+
+  /* レシートテーブル */
+  .receipt-table-wrap {
+    width: 100%; overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 8px;
+  }
+  .receipt-table { width: 100%; border-collapse: collapse; }
+  .receipt-table th, .receipt-table td {
+    border: 1px solid #e2e8f0; padding: 7px 8px; text-align: left; font-size: 13px;
+  }
+  .receipt-table th { background: #f7fafc; color: #4a5568; font-weight: 700; }
+  .receipt-table input {
+    width: 100%; border: none; padding: 3px; font-size: 13px; font-family: inherit; outline: none;
+  }
+  .receipt-table input:focus { background: #ebf8ff; }
+  .btn-add-row {
+    background: #edf2f7; color: #4a5568; border: 1px solid #e2e8f0;
+    padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 12px;
+    transition: all 0.2s; width: fit-content;
+  }
+  .btn-add-row:hover { background: #e2e8f0; }
+</style>
+</head>
+<body>
+
+<!-- ===== ログイン画面 ===== -->
+<div id="loginScreen" class="active">
+  <div class="login-card">
+    <h1>🌸 作業支援システム</h1>
+    <p class="subtitle">IDとパスワードを入力してください</p>
+    <div class="field">
+      <label for="loginId">ログインID</label>
+      <input type="text" id="loginId" autocomplete="username" inputmode="text">
+    </div>
+    <div class="field">
+      <label for="loginPass">パスワード</label>
+      <input type="password" id="loginPass" autocomplete="current-password">
+    </div>
+    <button class="btn btn-primary" onclick="login()">ログイン</button>
+    <p id="loginError" class="error-msg"></p>
+  </div>
+</div>
+
+<!-- ===== タスク画面（PC 2カラム） ===== -->
+<div id="taskScreen">
+  <!-- ヘッダーバー -->
+  <div class="pc-header">
+    <div class="pc-header-title">作業支援システム</div>
+    <div class="pc-header-right">
+      <div class="progress-inline">
+        <span>今月の進捗</span>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" id="progressFill" style="width:0%"></div>
+        </div>
+        <span id="progressText">- / 800</span>
+      </div>
+      <span class="user-name" id="userName"></span>
+      <button class="logout-btn" onclick="logout()">ログアウト</button>
+    </div>
+  </div>
+
+  <!-- メインコンテンツ -->
+  <div class="pc-main">
+    <!-- 左：画像パネル -->
+    <div class="panel-image">
+      <div class="task-image-wrap" id="imagePanel">
+        <div class="loading">タスクを読み込んでいます…</div>
+      </div>
+    </div>
+
+    <!-- 右：入力パネル -->
+    <div class="panel-input">
+      <!-- フィードバック -->
+      <div class="feedback" id="feedback">
+        <div class="feedback-icon" id="feedbackIcon"></div>
+        <div class="feedback-msg" id="feedbackMsg"></div>
+        <div class="feedback-sub" id="feedbackSub"></div>
+      </div>
+      <p class="panel-input-title">画像の内容を入力してください</p>
+      <!-- タスクコンテンツ（入力フォーム・ボタン） -->
+      <div id="taskContent"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let currentUser = null;
+  let currentTask = null;
+  let VERCEL_API_URL = '';
+  let isFirstTask = true;
+  let localProgress = { completed: 0, total: 800 }; // ローカルキャッシュ（GAS呼び出し不要）
+
+  // ===== 先読みキャッシュ =====
+  let taskQueue = [];      // 生成済みテキストのキュー
+  let isFetching = false;  // フェッチ中フラグ（二重実行防止）
+  const QUEUE_MIN = 2;     // この数を下回ったら補充
+  const QUEUE_FILL = 5;    // 一度に取得する件数
+
+  async function fillQueue() {
+    if (isFetching || taskQueue.length >= QUEUE_MIN || !VERCEL_API_URL) return;
+    isFetching = true;
+    try {
+      const controller = new AbortController();
+      const tid = setTimeout(() => controller.abort(), 20000);
+      const res = await fetch(VERCEL_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ count: QUEUE_FILL, category: 'レシート' }),
+        signal: controller.signal,
+      });
+      clearTimeout(tid);
+      const data = await res.json();
+      if (data.texts && data.texts.length > 0) taskQueue.push(...data.texts);
+    } catch(e) {}
+    isFetching = false;
+  }
+
+  // GASスクリプトプロパティからVercel URLを取得し、即座に先読み開始
+  google.script.run
+    .withSuccessHandler(res => { if (res && res.url) { VERCEL_API_URL = res.url; fillQueue(); } })
+    .withFailureHandler(() => {})
+    .handleRequest({ action: 'getVercelApiUrl' });
+
+  // ============ レシートCanvasレンダリング（画像URLなしタスク用） ============
+  async function renderReceiptCanvas(text) {
+    if (document.fonts) await document.fonts.ready;
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    let rd = null;
+    try { rd = JSON.parse(text); } catch(e) {}
+    const store = rd ? (rd.store || '') : text;
+    const date  = rd ? (rd.date  || '') : '';
+    const items = rd && rd.items ? rd.items : [];
+    const sub   = items.reduce((s, it) => s + Number(it.price || 0), 0);
+    const tax   = Math.round(sub * 0.1);
+    const total = sub + tax;
+
+    const dLines = [
+      { text: store, align: 'center', bold: true, size: 20 },
+      { text: date,  align: 'center', size: 16 },
+      { type: 'divider' },
+      ...items.map(it => ({ text: String(it.name), right: `¥${Number(it.price).toLocaleString()}`, size: 17 })),
+      { type: 'divider' },
+      { text: '小計',       right: `¥${sub.toLocaleString()}`,   size: 16 },
+      { text: '消費税(10%)',right: `¥${tax.toLocaleString()}`,   size: 16 },
+      { text: '合　計',     right: `¥${total.toLocaleString()}`, size: 18, bold: true },
+    ];
+
+    const lineH = 28, padV = 22;
+    const W = 460, H = Math.max(500, dLines.length * lineH + padV * 2 + 100);
+    canvas.width = W; canvas.height = H;
+
+    ctx.fillStyle = '#3a2516'; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = 'rgba(80,45,15,0.35)'; ctx.lineWidth = 1;
+    for (let i = 0; i < 6; i++) {
+      const x = Math.random() * W;
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + (Math.random()-0.5)*25, H); ctx.stroke();
+    }
+
+    ctx.save();
+    ctx.translate(W/2, H/2);
+    ctx.rotate((Math.random()-0.5) * 5 * Math.PI / 180);
+    const rpW = 340, rpH = H - 70;
+
+    ctx.shadowColor = 'rgba(0,0,0,0.65)'; ctx.shadowBlur = 22; ctx.shadowOffsetX = 8; ctx.shadowOffsetY = 11;
+    const rpg = ctx.createLinearGradient(-rpW/2,-rpH/2,rpW/2,rpH/2);
+    rpg.addColorStop(0,'#fefef8'); rpg.addColorStop(1,'#f6f6e0');
+    ctx.fillStyle = rpg; ctx.fillRect(-rpW/2,-rpH/2,rpW,rpH);
+    ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+
+    ctx.beginPath(); ctx.rect(-rpW/2,-rpH/2,rpW,rpH); ctx.clip();
+    for (let i = 0; i < 200; i++) {
+      ctx.fillStyle = `rgba(160,150,90,${Math.random()*0.035})`;
+      ctx.fillRect((Math.random()-0.5)*rpW,(Math.random()-0.5)*rpH,Math.random()*2,1);
+    }
+
+    ctx.textBaseline = 'middle';
+    let ry = -rpH/2 + padV + lineH/2;
+    for (const dl of dLines) {
+      if (ry > rpH/2 - lineH) break;
+      if (dl.type === 'divider') {
+        ctx.strokeStyle='rgba(0,0,0,0.22)'; ctx.lineWidth=0.8;
+        ctx.setLineDash([4,3]);
+        ctx.beginPath(); ctx.moveTo(-rpW/2+12,ry); ctx.lineTo(rpW/2-12,ry); ctx.stroke();
+        ctx.setLineDash([]); ry += lineH*0.5; continue;
+      }
+      const fs = dl.size || 17;
+      ctx.font = `${dl.bold?'bold ':''}${fs}px 'DotGothic16', monospace`;
+      ctx.fillStyle = `rgba(15,15,10,${0.76+Math.random()*0.20})`;
+      if (dl.align === 'center') {
+        ctx.textAlign = 'center'; ctx.fillText(dl.text, 0, ry);
+      } else if (dl.right) {
+        ctx.textAlign = 'left';  ctx.fillText(dl.text,   -rpW/2+16, ry);
+        ctx.textAlign = 'right'; ctx.fillText(dl.right,   rpW/2-16, ry);
+      } else {
+        ctx.textAlign = 'left'; ctx.fillText(dl.text, -rpW/2+16, ry);
+      }
+      ry += lineH;
+    }
+    ctx.restore();
+    return canvas.toDataURL('image/jpeg', 0.88);
+  }
+
+  // Google Drive の画像URLをログイン不要の公開URLに変換する
+  function toDriveImgUrl(url) {
+    if (!url) return '';
+    if (url.indexOf('lh3.googleusercontent.com') >= 0) return url;
+    var pos = url.indexOf('id=');
+    if (pos >= 0) {
+      var fileId = url.slice(pos + 3).split('&')[0];
+      if (fileId) return 'https://lh3.googleusercontent.com/d/' + fileId;
+    }
+    return url;
+  }
+
+  // ============ 共通 ============
+  function callGas(data, timeoutMs = 25000) {
+    const gasPromise = new Promise((resolve) => {
+      try {
+        google.script.run
+          .withSuccessHandler((res) => resolve(res || {}))
+          .withFailureHandler((err) => resolve({ error: err.message }))
+          .handleRequest(data);
+      } catch (err) {
+        resolve({ error: "GASとの通信に失敗しました。(" + err.message + ")" });
+      }
+    });
+    const timeoutPromise = new Promise(resolve =>
+      setTimeout(() => resolve({ error: 'timeout' }), timeoutMs)
+    );
+    return Promise.race([gasPromise, timeoutPromise]);
+  }
+
+  function show(screenId) {
+    document.getElementById('loginScreen').classList.remove('active');
+    document.getElementById('taskScreen').classList.remove('active');
+    document.getElementById(screenId).classList.add('active');
+  }
+
+  // ============ ログイン ============
+  async function login() {
+    const loginId = document.getElementById('loginId').value.trim();
+    const password = document.getElementById('loginPass').value;
+    document.getElementById('loginError').textContent = '';
+
+    if (!loginId || !password) {
+      document.getElementById('loginError').textContent = 'IDとパスワードを入力してください';
+      return;
+    }
+
+    const result = await callGas({ action: 'login', loginId, password });
+    if (result.error) {
+      document.getElementById('loginError').textContent = result.error;
+      return;
+    }
+    console.log("Login result:", result);
+    currentUser = result.user;
+    sessionStorage.setItem('user', JSON.stringify(currentUser));
+
+    if (currentUser.role === 'admin') {
+      console.log("User is admin. Redirecting to admin page...");
+      // 管理者は管理者ページへ
+      google.script.run.withSuccessHandler(url => {
+        window.open(url + '?page=admin', '_top');
+      }).getScriptUrl();
+      return;
+    }
+
+    // ログイン時に進捗・Vercel URLもまとめて受け取る
+    if (result.progress) {
+      localProgress = result.progress;
+    }
+    if (result.vercelUrl && !VERCEL_API_URL) {
+      VERCEL_API_URL = result.vercelUrl;
+      fillQueue(); // ログイン完了後すぐ先読み開始
+    }
+
+    document.getElementById('userName').textContent = currentUser.name + ' さん、こんにちは！';
+    show('taskScreen');
+    updateProgress(localProgress);
+    generateTask();
+  }
+
+  function logout() {
+    sessionStorage.removeItem('user');
+    currentUser = null;
+    currentTask = null;
+    isFirstTask = true;
+    taskQueue = [];
+    document.getElementById('loginId').value = '';
+    document.getElementById('loginPass').value = '';
+    document.getElementById('loginError').textContent = '';
+    show('loginScreen');
+  }
+
+  // ============ タスク（オンデマンド生成） ============
+  async function generateTask() {
+    hideFeedback();
+
+    // 初回のみフルローディング表示。2回目以降は既存画像を維持しオーバーレイで待機
+    if (isFirstTask) {
+      document.getElementById('imagePanel').innerHTML = '<div class="loading">レシートを準備しています…</div>';
+    } else {
+      // 既存の画像の上にスピナーオーバーレイを乗せる
+      const overlay = document.createElement('div');
+      overlay.className = 'image-generating-overlay';
+      overlay.id = 'generatingOverlay';
+      overlay.innerHTML = '<div class="spinner"></div>';
+      document.querySelector('.panel-image').appendChild(overlay);
+    }
+    document.getElementById('taskContent').innerHTML = '';
+
+    // 月間上限チェック（ローカルキャッシュを使用、GAS呼び出し不要）
+    const { completed, total: limit } = localProgress;
+    if (completed >= limit) {
+      document.getElementById('generatingOverlay')?.remove();
+      document.getElementById('imagePanel').innerHTML = `
+        <div class="loading" style="text-align:center;padding:40px;line-height:2;">
+          🎉 今月の上限（${limit}枚）に達しました！<br>
+          <span style="font-size:14px;color:#718096;">お疲れ様でした。来月もよろしくお願いします。</span>
+        </div>`;
+      return;
+    }
+
+    if (!VERCEL_API_URL) {
+      document.getElementById('imagePanel').innerHTML = '<div class="loading">⚠️ システム設定を読み込み中です。しばらくお待ちください。</div>';
+      document.getElementById('taskContent').innerHTML = `<button class="btn btn-primary" onclick="generateTask()" style="margin-top:12px;">🔄 再試行</button>`;
+      return;
+    }
+
+    // キューにストックがあれば即時表示、なければ補充を待つ
+    if (taskQueue.length === 0) await fillQueue();
+
+    const text = taskQueue.shift();
+    if (!text) {
+      document.getElementById('generatingOverlay')?.remove();
+      document.getElementById('imagePanel').innerHTML = '<div class="loading">⚠️ 生成に失敗しました</div>';
+      document.getElementById('taskContent').innerHTML = `<button class="btn btn-primary" onclick="generateTask()" style="margin-top:12px;">🔄 再試行</button>`;
+      return;
+    }
+
+    currentTask = { correct_text: text, task_type: 'receipt' };
+    const imageDataUrl = await renderReceiptCanvas(text);
+    document.getElementById('generatingOverlay')?.remove();
+    document.getElementById('imagePanel').innerHTML =
+      `<img src="${imageDataUrl}" style="max-width:100%;max-height:100%;object-fit:contain;">`;
+    isFirstTask = false;
+    showReceiptForm();
+
+    // バックグラウンドでキューを補充（待機しない）
+    fillQueue();
+  }
+
+  function showReceiptForm() {
+    document.getElementById('taskContent').innerHTML = `
+      <div class="receipt-table-wrap">
+        <table class="receipt-table" id="receiptTable">
+          <thead>
+            <tr><th>品目</th><th>金額（円）</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><input type="text" class="r-name" placeholder="品名"></td>
+              <td><input type="text" class="r-price" placeholder="100" oninput="updateReceiptTotals()"></td>
+            </tr>
+          </tbody>
+          <tfoot style="border-top:2px solid #cbd5e0;color:#718096;font-size:13px;">
+            <tr><td style="padding:4px 6px;">小計</td><td id="r-subtotal" style="padding:4px 6px;text-align:right;">¥0</td></tr>
+            <tr><td style="padding:4px 6px;">消費税(10%)</td><td id="r-tax" style="padding:4px 6px;text-align:right;">¥0</td></tr>
+            <tr style="font-weight:700;color:#2d3748;"><td style="padding:4px 6px;">合　計</td><td id="r-total" style="padding:4px 6px;text-align:right;">¥0</td></tr>
+            <tr><td colspan="2" style="padding:2px 6px;font-size:11px;color:#a0aec0;">※ 小計以下は自動計算されます</td></tr>
+          </tfoot>
+        </table>
+      </div>
+      <button class="btn-add-row" onclick="addReceiptRow()">＋ 行を追加</button>
+      <button class="btn btn-success" onclick="submitAnswer()">送信する</button>
+      <button class="btn-skip" onclick="skipTask()">スキップ（画像が表示されない場合）</button>
+    `;
+    const firstInput = document.querySelector('#receiptTable .r-name');
+    if (firstInput) firstInput.focus();
+  }
+
+  function addReceiptRow() {
+    const tbody = document.querySelector('#receiptTable tbody');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="text" class="r-name" placeholder="品名"></td>
+      <td><input type="text" class="r-price" placeholder="100" oninput="updateReceiptTotals()"></td>
+    `;
+    tbody.appendChild(tr);
+    tr.querySelector('input').focus();
+  }
+
+  function updateReceiptTotals() {
+    const prices = Array.from(document.querySelectorAll('#receiptTable .r-price'));
+    const sub = prices.reduce((sum, el) => sum + (parseInt(el.value) || 0), 0);
+    const tax = Math.round(sub * 0.1);
+    const total = sub + tax;
+    const fmt = n => '¥' + n.toLocaleString();
+    const s = document.getElementById('r-subtotal');
+    const t = document.getElementById('r-tax');
+    const tt = document.getElementById('r-total');
+    if (s) s.textContent = fmt(sub);
+    if (t) t.textContent = fmt(tax);
+    if (tt) tt.textContent = fmt(total);
+  }
+
+  /**
+   * 画像が表示されない場合などの緊急スキップ
+   */
+  function skipTask() {
+    if (confirm('この画像をスキップして別の課題を表示しますか？\n(現在の進捗はカウントされません)')) {
+      generateTask();
+    }
+  }
+
+  async function submitAnswer() {
+    let answerText = "";
+    if (currentTask.task_type === "receipt") {
+      const rows = document.querySelectorAll('#receiptTable tbody tr');
+      const items = [];
+      rows.forEach(row => {
+        const name = row.querySelector('.r-name').value.trim();
+        const price = row.querySelector('.r-price').value.trim();
+        if (name || price) {
+          items.push({ name, price });
+        }
+      });
+      if (items.length === 0) return;
+      answerText = JSON.stringify({ items });
+    } else {
+      answerText = document.getElementById('answerInput').value.trim();
+      if (!answerText) return;
+    }
+
+    // 二重送信防止
+    const submitBtn = document.querySelector('.btn-success');
+    if (submitBtn) submitBtn.disabled = true;
+
+    const result = await callGas({
+      action: 'submitOnDemandAnswer',
+      userId: currentUser.id,
+      correctText: currentTask.correct_text,
+      answerText,
+    });
+
+    if (result.error) {
+      alert(result.error);
+      if (submitBtn) submitBtn.disabled = false;
+      return;
+    }
+
+    // ローカル進捗を更新してシームレスに次タスクへ
+    if (result.progress) localProgress = result.progress;
+    updateProgress(result.progress);
+    generateTask();
+  }
+
+  function showFeedback(result) {
+    const fb = document.getElementById('feedback');
+    fb.className = 'feedback ' + (result.is_correct ? 'correct' : 'incorrect');
+    document.getElementById('feedbackIcon').textContent = result.is_correct ? '⭕' : '❌';
+    document.getElementById('feedbackMsg').textContent = result.message;
+    document.getElementById('feedbackSub').textContent = result.is_correct
+      ? '正解です！次のタスクへ進みましょう'
+      : 'もう一度チャレンジ、または次へ進みましょう';
+
+    fb.style.display = 'block';
+
+    // タスク内容を「次へ」ボタンに切り替え
+    document.getElementById('taskContent').innerHTML = `
+      <button class="btn btn-primary next-btn" onclick="generateTask()">次のタスクへ ➡</button>
+    `;
+  }
+
+  function hideFeedback() {
+    const fb = document.getElementById('feedback');
+    fb.style.display = 'none';
+  }
+
+  // ============ 進捗 ============
+  async function loadProgress() {
+    const result = await callGas({ action: 'getProgress', userId: currentUser.id });
+    if (!result.error && result.progress) {
+      updateProgress(result.progress);
+    }
+  }
+
+  function updateProgress(progress) {
+    const pct = Math.min(100, Math.round(progress.completed / progress.total * 100));
+    document.getElementById('progressText').textContent = progress.completed + ' / ' + progress.total;
+    document.getElementById('progressFill').style.width = pct + '%';
+  }
+
+  // ============ 初期化 ============
+  window.addEventListener('load', () => {
+    const saved = sessionStorage.getItem('user');
+    if (saved) {
+      currentUser = JSON.parse(saved);
+      console.log("Restored session for:", currentUser);
+      if (currentUser.role === 'admin') {
+        console.log("Redirecting admin to admin page...");
+        google.script.run.withSuccessHandler(url => {
+          window.open(url + '?page=admin', '_top');
+        }).getScriptUrl();
+        return;
+      }
+      document.getElementById('userName').textContent = currentUser.name + ' さん、こんにちは！';
+      show('taskScreen');
+      // セッション復元時はGASから進捗を取得してからタスク開始
+      callGas({ action: 'getProgress', userId: currentUser.id }, 25000).then(r => {
+        if (r.progress) { localProgress = r.progress; updateProgress(r.progress); }
+      });
+      generateTask();
+    }
+  });
+</script>
+</body>
+</html>

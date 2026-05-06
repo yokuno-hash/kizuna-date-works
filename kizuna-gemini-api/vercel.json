@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/generate-texts.js": {
+      "maxDuration": 300
+    }
+  }
+}

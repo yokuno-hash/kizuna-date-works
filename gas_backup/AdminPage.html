@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>管理者画面 - 作業支援システム</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Noto Sans JP', sans-serif;
+    background: #f7f8fc;
+    min-height: 100vh;
+  }
+
+  /* ヘッダー */
+  .header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    padding: 16px 32px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .header h1 { font-size: 18px; }
+  .logout-btn {
+    background: rgba(255,255,255,0.2); color: #fff; border: 1px solid rgba(255,255,255,0.4);
+    padding: 8px 16px; border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 14px;
+    transition: background 0.2s;
+  }
+  .logout-btn:hover { background: rgba(255,255,255,0.3); }
+
+  /* ログイン画面 */
+  #loginScreen {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh;
+  }
+  .login-card {
+    background: #fff; border-radius: 20px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    padding: 40px 32px; width: 100%; max-width: 400px;
+  }
+  .login-card h2 { font-size: 20px; color: #1a202c; margin-bottom: 24px; text-align: center; }
+
+  /* タブナビ */
+  .tabs {
+    display: flex; gap: 8px; padding: 16px 32px 0;
+    border-bottom: 2px solid #e2e8f0; background: #fff;
+  }
+  .tab {
+    padding: 12px 20px; border-radius: 8px 8px 0 0; border: none;
+    background: #f7f8fc; cursor: pointer; font-family: inherit; font-size: 14px;
+    font-weight: 700; color: #718096; transition: all 0.2s;
+  }
+  .tab.active { background: #667eea; color: #fff; }
+
+  /* コンテンツ */
+  .main { padding: 24px 32px; max-width: 900px; margin: 0 auto; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* セクション */
+  .section-title {
+    font-size: 18px; font-weight: 700; color: #2d3748; margin-bottom: 16px;
+  }
+
+  /* フォーム部品 */
+  .form-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  .form-row input, .form-row select {
+    flex: 1; min-width: 140px;
+    border: 2px solid #e2e8f0; border-radius: 10px;
+    padding: 10px 12px; font-size: 14px; font-family: inherit; outline: none;
+    transition: border-color 0.2s;
+  }
+  .form-row input:focus, .form-row select:focus { border-color: #667eea; }
+  .btn-add {
+    padding: 10px 20px; border-radius: 10px; border: none;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: #fff; font-weight: 700; font-size: 14px; font-family: inherit;
+    cursor: pointer; white-space: nowrap;
+    transition: opacity 0.2s;
+  }
+  .btn-add:hover { opacity: 0.9; }
+
+  /* テーブル */
+  .table-wrap { overflow-x: auto; border-radius: 12px; background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: #f7f8fc; padding: 12px 16px; text-align: left; color: #4a5568; font-weight: 700; }
+  td { padding: 12px 16px; border-top: 1px solid #f0f4f8; color: #2d3748; }
+  tr:hover td { background: #f7f8fc; }
+
+  /* 削除ボタン */
+  .btn-del {
+    padding: 4px 12px; border-radius: 6px; border: 1px solid #fc8181;
+    background: #fff5f5; color: #e53e3e; cursor: pointer; font-size: 12px; font-family: inherit;
+  }
+  .btn-del:hover { background: #fed7d7; }
+
+  /* パスワードリセット */
+  .btn-reset {
+    padding: 4px 12px; border-radius: 6px; border: 1px solid #90cdf4;
+    background: #ebf8ff; color: #2b6cb0; cursor: pointer; font-size: 12px; font-family: inherit;
+  }
+  .btn-reset:hover { background: #bee3f8; }
+
+  /* CSVボタン */
+  .btn-csv {
+    padding: 8px 16px; border-radius: 10px; border: 1px solid #68d391;
+    background: #f0fff4; color: #276749; cursor: pointer; font-weight: 700; font-size: 13px;
+    margin-bottom: 16px; font-family: inherit;
+  }
+  .btn-csv:hover { background: #c6f6d5; }
+
+  .msg { font-size: 13px; margin-top: 8px; color: #276749; }
+  .err { font-size: 13px; margin-top: 8px; color: #e53e3e; }
+
+  /* フォームカード */
+  .form-card {
+    background: #fff; border-radius: 12px;
+    padding: 20px; margin-bottom: 20px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  }
+  .form-card h3 { font-size: 15px; color: #4a5568; margin-bottom: 12px; }
+
+  /* フォームラベル */
+  .field-label { font-size: 13px; color: #718096; font-weight: 700; margin-bottom: 4px; display: block; }
+
+  /* ローディング */
+  .loading { color: #a0aec0; font-size: 14px; padding: 20px; text-align: center; }
+</style>
+</head>
+<body>
+
+<!-- ===== ログイン ===== -->
+<div id="loginScreen">
+  <div class="login-card">
+    <h2>🔐 管理者ログイン</h2>
+    <div style="margin-bottom:12px">
+      <label class="field-label" for="aLoginId">ログインID</label>
+      <input type="text" id="aLoginId" style="width:100%;border:2px solid #e2e8f0;border-radius:10px;padding:10px 12px;font-size:15px;font-family:inherit;outline:none;" autocomplete="username">
+    </div>
+    <div style="margin-bottom:20px">
+      <label class="field-label" for="aLoginPass">パスワード</label>
+      <input type="password" id="aLoginPass" style="width:100%;border:2px solid #e2e8f0;border-radius:10px;padding:10px 12px;font-size:15px;font-family:inherit;outline:none;" autocomplete="current-password">
+    </div>
+    <button class="btn-add" style="width:100%;padding:14px" onclick="adminLogin()">ログイン</button>
+    <p id="loginErr" class="err"></p>
+  </div>
+</div>
+
+<!-- ===== 管理画面 ===== -->
+<div id="adminScreen" style="display:none">
+  <div class="header">
+    <h1>⚙️ 管理者パネル</h1>
+    <button class="logout-btn" onclick="logout()">ログアウト</button>
+  </div>
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('users')">👥 ユーザー</button>
+    <button class="tab" onclick="switchTab('tasks')">📋 タスク</button>
+    <button class="tab" onclick="switchTab('progress')">📊 進捗</button>
+  </div>
+  <div class="main">
+
+    <!-- ユーザー管理 -->
+    <div id="panel-users" class="panel active">
+      <div class="form-card">
+        <h3>➕ 新規ユーザー追加</h3>
+        <div class="form-row">
+          <input type="text" id="newName" placeholder="名前">
+          <input type="text" id="newLoginId" placeholder="ログインID">
+          <input type="password" id="newPass" placeholder="パスワード">
+          <select id="newRole">
+            <option value="user">利用者</option>
+            <option value="admin">管理者</option>
+          </select>
+          <button class="btn-add" onclick="addUser()">追加</button>
+        </div>
+        <p id="userMsg" class="msg"></p>
+      </div>
+      <div class="table-wrap" id="userTable"><div class="loading">読み込み中…</div></div>
+    </div>
+
+    <!-- タスク管理 -->
+    <div id="panel-tasks" class="panel">
+      <div class="form-card">
+        <h3>➕ 新規タスク追加</h3>
+        <div class="form-row">
+          <input type="text" id="newImageUrl" placeholder="画像URL（Googleドライブの共有リンク）" style="flex:2">
+          <input type="text" id="newCorrectText" placeholder="正解テキスト">
+          <input type="text" id="newCategory" placeholder="カテゴリ（任意）">
+          <button class="btn-add" onclick="addTask()">追加</button>
+        </div>
+        <p id="taskMsg" class="msg"></p>
+      </div>
+
+      <div class="form-card">
+        <h3>✨ AIで課題を自動生成</h3>
+        <div class="form-row">
+          <input type="text" id="aiCategory" placeholder="カテゴリ（例：レシート、名前、日付）">
+          <input type="number" id="aiCount" value="10" min="1" max="100" style="flex:0.5">
+          <button class="btn-add" id="aiBtn" onclick="generateAI()">AI生成実行</button>
+        </div>
+        <p id="aiMsg" class="msg"></p>
+        <p class="field-label" style="font-size:12px; margin-top:8px;">
+          ※ Gemini APIを使用してテキストを自動生成します。<br>
+          ※ 生成されたテキストは画像URLが「AI Generated」として登録されます。
+        </p>
+      </div>
+
+      <div class="form-card">
+        <h3>📁 CSVでタスク一括追加</h3>
+        <div class="form-row">
+          <input type="file" id="csvFile" accept=".csv" style="flex:2; border: 2px dashed #e2e8f0; padding: 10px; cursor: pointer;">
+          <button class="btn-add" onclick="importCsv()">CSVを読み込む</button>
+        </div>
+        <p id="csvMsg" class="msg"></p>
+        <p class="field-label" style="font-size:12px; margin-top:8px;">
+          ※ ヘッダー行なしのカンマ区切りで作成してください。<br>
+          ※ 列の順番：【1列目: 画像URL】 【2列目: 正解テキスト】 【3列目: カテゴリ(任意)】
+        </p>
+      </div>
+
+      <div class="table-wrap" id="taskTable"><div class="loading">読み込み中…</div></div>
+    </div>
+
+    <!-- 進捗管理 -->
+    <div id="panel-progress" class="panel">
+      <button class="btn-csv" onclick="downloadCsv()">📥 CSVダウンロード</button>
+      <div class="table-wrap" id="progressTable"><div class="loading">読み込み中…</div></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  let currentAdmin = null;
+
+  function callGas(data) {
+    return new Promise((resolve) => {
+      try {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler((err) => resolve({ error: err.message }))
+          .handleRequest(data);
+      } catch (err) {
+        // ローカル環境(GAS外)で開いた場合など
+        resolve({ error: "GASとの通信に失敗しました。ローカルでHTMLを開いていませんか？(" + err.message + ")" });
+      }
+    });
+  }
+
+  // ===== ログイン =====
+  async function adminLogin() {
+    const loginId = document.getElementById('aLoginId').value.trim();
+    const password = document.getElementById('aLoginPass').value;
+    document.getElementById('loginErr').textContent = '';
+    const result = await callGas({ action: 'login', loginId, password });
+    if (result.error) { document.getElementById('loginErr').textContent = result.error; return; }
+    if (result.user.role !== 'admin') { document.getElementById('loginErr').textContent = '管理者権限がありません'; return; }
+    currentAdmin = result.user;
+    sessionStorage.setItem('adminUser', JSON.stringify(currentAdmin));
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('adminScreen').style.display = 'block';
+    loadUsers();
+    loadTasks();
+    loadProgress();
+  }
+
+  function logout() {
+    sessionStorage.removeItem('adminUser');
+    currentAdmin = null;
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('adminScreen').style.display = 'none';
+  }
+
+  // ===== タブ切替 =====
+  function switchTab(name) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById('panel-' + name).classList.add('active');
+  }
+
+  // ===== ユーザー管理 =====
+  async function loadUsers() {
+    const result = await callGas({ action: 'getUsers', userId: currentAdmin.id });
+    if (result.error) { document.getElementById('userTable').innerHTML = '<div class="loading">⚠️ ' + result.error + '</div>'; return; }
+    const rows = result.users.map(u => `
+      <tr>
+        <td>${u.name}</td>
+        <td>${u.login_id}</td>
+        <td>${u.role === 'admin' ? '管理者' : '利用者'}</td>
+        <td>
+          <button class="btn-reset" onclick="resetPw('${u.id}', '${u.name}')">PW変更</button>
+        </td>
+      </tr>`).join('');
+    document.getElementById('userTable').innerHTML = `
+      <table><thead><tr><th>名前</th><th>ログインID</th><th>権限</th><th>操作</th></tr></thead>
+      <tbody>${rows}</tbody></table>`;
+  }
+
+  async function addUser() {
+    const name = document.getElementById('newName').value.trim();
+    const loginId = document.getElementById('newLoginId').value.trim();
+    const password = document.getElementById('newPass').value;
+    const role = document.getElementById('newRole').value;
+    document.getElementById('userMsg').textContent = '';
+    if (!name || !loginId || !password) { document.getElementById('userMsg').textContent = '全項目を入力してください'; return; }
+    const result = await callGas({ action: 'addUser', userId: currentAdmin.id, name, loginId, password, role });
+    if (result.error) { document.getElementById('userMsg').textContent = '⚠️ ' + result.error; return; }
+    document.getElementById('userMsg').textContent = '✅ 追加しました';
+    document.getElementById('newName').value = '';
+    document.getElementById('newLoginId').value = '';
+    document.getElementById('newPass').value = '';
+    loadUsers();
+  }
+
+  async function resetPw(targetUserId, name) {
+    const newPassword = prompt(`${name} さんの新しいパスワードを入力してください`);
+    if (!newPassword) return;
+    const result = await callGas({ action: 'resetPassword', userId: currentAdmin.id, targetUserId, newPassword });
+    alert(result.error ? '⚠️ ' + result.error : '✅ パスワードを変更しました');
+  }
+
+  // ===== タスク管理 =====
+  async function loadTasks() {
+    const result = await callGas({ action: 'getTasks', userId: currentAdmin.id });
+    if (result.error) { document.getElementById('taskTable').innerHTML = '<div class="loading">⚠️ ' + result.error + '</div>'; return; }
+    const rows = result.tasks.map(t => `
+      <tr>
+        <td>${t.category || '-'}</td>
+        <td>${t.correct_text}</td>
+        <td><a href="${t.image_url}" target="_blank" style="color:#667eea;font-size:12px">確認</a></td>
+        <td><button class="btn-del" onclick="deleteTask('${t.id}')">削除</button></td>
+      </tr>`).join('');
+    document.getElementById('taskTable').innerHTML = `
+      <table><thead><tr><th>カテゴリ</th><th>正解テキスト</th><th>画像</th><th>操作</th></tr></thead>
+      <tbody>${rows}</tbody></table>`;
+  }
+
+  async function addTask() {
+    const imageUrl = document.getElementById('newImageUrl').value.trim();
+    const correctText = document.getElementById('newCorrectText').value.trim();
+    const category = document.getElementById('newCategory').value.trim();
+    document.getElementById('taskMsg').textContent = '';
+    if (!imageUrl || !correctText) { document.getElementById('taskMsg').textContent = '画像URLと正解テキストは必須です'; return; }
+    const result = await callGas({ action: 'addTask', userId: currentAdmin.id, imageUrl, correctText, category });
+    if (result.error) { document.getElementById('taskMsg').textContent = '⚠️ ' + result.error; return; }
+    document.getElementById('taskMsg').textContent = '✅ 追加しました';
+    document.getElementById('newImageUrl').value = '';
+    document.getElementById('newCorrectText').value = '';
+    document.getElementById('newCategory').value = '';
+    loadTasks();
+  }
+
+  async function deleteTask(taskId) {
+    if (!confirm('このタスクを削除しますか？')) return;
+    const result = await callGas({ action: 'deleteTask', userId: currentAdmin.id, taskId });
+    alert(result.error ? '⚠️ ' + result.error : '✅ 削除しました');
+    loadTasks();
+  }
+
+  // ===== 進捗管理 =====
+  let progressData = [];
+  async function loadProgress() {
+    const result = await callGas({ action: 'getAdminProgress', userId: currentAdmin.id });
+    if (result.error) { document.getElementById('progressTable').innerHTML = '<div class="loading">⚠️ ' + result.error + '</div>'; return; }
+    progressData = result.progress;
+    const rows = progressData.map(p => `
+      <tr>
+        <td>${p.name}</td>
+        <td>${p.login_id}</td>
+        <td>${p.month}</td>
+        <td>${p.completed_count} / 400</td>
+        <td>
+          <div style="background:#e2e8f0;border-radius:6px;height:10px;width:160px;overflow:hidden">
+            <div style="background:linear-gradient(90deg,#667eea,#764ba2);height:100%;width:${Math.min(100,(p.completed_count/400*100)).toFixed(0)}%;border-radius:6px"></div>
+          </div>
+        </td>
+      </tr>`).join('');
+    document.getElementById('progressTable').innerHTML = `
+      <table><thead><tr><th>名前</th><th>ログインID</th><th>対象月</th><th>件数</th><th>進捗</th></tr></thead>
+      <tbody>${rows}</tbody></table>`;
+  }
+
+  function downloadCsv() {
+    if (!progressData.length) return;
+    const header = 'name,login_id,month,completed_count\n';
+    const body = progressData.map(p => `${p.name},${p.login_id},${p.month},${p.completed_count}`).join('\n');
+    const blob = new Blob(['\uFEFF' + header + body], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'progress.csv'; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // ===== CSV一括インポート処理 =====
+  async function importCsv() {
+    const fileInput = document.getElementById('csvFile');
+    if (!fileInput.files.length) {
+      document.getElementById('csvMsg').className = 'err';
+      document.getElementById('csvMsg').textContent = 'CSVファイルを選択してください';
+      return;
+    }
+
+    document.getElementById('csvMsg').className = 'msg';
+    document.getElementById('csvMsg').textContent = '⏳ 読み込み中...（件数が多いと数秒かかります）';
+
+    const file = fileInput.files[0];
+    const reader = new FileReader();
+
+    reader.onload = async function(e) {
+      const text = e.target.result;
+      const lines = text.split('\n').filter(l => l.trim() !== '');
+      const tasksData = [];
+
+      for (const line of lines) {
+        const cols = line.split(',').map(col => col.trim().replace(/^"|"$/g, ''));
+        if (cols.length >= 2 && cols[0] !== '') {
+          tasksData.push({
+            imageUrl: cols[0],
+            correctText: cols[1],
+            category: cols[2] || ''
+          });
+        }
+      }
+
+      if (tasksData.length === 0) {
+        document.getElementById('csvMsg').className = 'err';
+        document.getElementById('csvMsg').textContent = '⚠️ 有効なデータがありませんでした';
+        return;
+      }
+
+      const result = await callGas({ action: 'addTasksBulk', userId: currentAdmin.id, tasksData });
+
+      if (result.error) {
+        document.getElementById('csvMsg').className = 'err';
+        document.getElementById('csvMsg').textContent = '⚠️ ' + result.error;
+      } else {
+        document.getElementById('csvMsg').className = 'msg';
+        document.getElementById('csvMsg').textContent = `✅ ${result.count}件のタスクを一括追加しました！`;
+        fileInput.value = '';
+        loadTasks();
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  // ===== AI生成処理 =====
+  async function generateAI() {
+    const category = document.getElementById('aiCategory').value.trim();
+    const count = parseInt(document.getElementById('aiCount').value);
+    const btn = document.getElementById('aiBtn');
+    const msg = document.getElementById('aiMsg');
+
+    if (!category) {
+      msg.className = 'err';
+      msg.textContent = 'カテゴリを入力してください';
+      return;
+    }
+
+    if (confirm(`「${category}」の課題を${count}件、AIで生成して登録しますか？`)) {
+      btn.disabled = true;
+      btn.style.opacity = '0.6';
+      msg.className = 'msg';
+      msg.textContent = '⏳ AIが考え中...（数秒〜十数秒かかります）';
+
+      const result = await callGas({ action: 'generateAI', userId: currentAdmin.id, category, count });
+
+      btn.disabled = false;
+      btn.style.opacity = '1';
+
+      if (result.error) {
+        msg.className = 'err';
+        msg.textContent = '⚠️ ' + result.error;
+      } else {
+        msg.className = 'msg';
+        msg.textContent = `✅ AIで${result.count}件の課題を生成・登録しました！`;
+        document.getElementById('aiCategory').value = '';
+        loadTasks();
+      }
+    }
+  }
+
+  // ===== 初期化 =====
+  window.addEventListener('load', () => {
+    const saved = sessionStorage.getItem('adminUser');
+    if (saved) {
+      currentAdmin = JSON.parse(saved);
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('adminScreen').style.display = 'block';
+      loadUsers(); loadTasks(); loadProgress();
+    }
+  });
+</script>
+</body>
+</html>
