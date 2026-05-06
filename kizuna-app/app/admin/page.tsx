@@ -533,7 +533,6 @@ export default function AdminPage() {
       <div style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: '#fff', padding: '16px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1 style={{ fontSize: 18, margin: 0 }}>⌨️ 絆データワークス 管理者パネル</h1>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button style={S.headerBtn} onClick={() => window.location.href = '/'} title="ユーザー画面を開く">📝 ユーザー画面</button>
           <button style={S.headerBtn} onClick={handleLogout}>ログアウト</button>
         </div>
       </div>
