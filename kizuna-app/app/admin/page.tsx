@@ -16,6 +16,8 @@ interface ProgressRow {
   correct_count: number;
   wrong_count: number;
   empty_count: number;
+  all_total: number;
+  all_correct: number;
 }
 interface Answer { id: string; user_name: string; user_id: string; client_id: string | null; client_name: string; task_category: string; task_type: string; image_url: string; correct_text: string; answer_text: string; is_correct: boolean; accuracy: number | null; created_at: string; updated_at: string | null; }
 
@@ -452,6 +454,27 @@ export default function AdminPage() {
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
 
+  const downloadAllTimeCsv = () => {
+    const rows = progressClientFilter
+      ? progressRows.filter(p => p.client_id === progressClientFilter)
+      : progressRows;
+    if (!rows.length) return;
+    const header = 'client_name,name,login_id,回答数,正答数,正答率\n';
+    const body = rows.map(p => {
+      const ratio = p.all_total > 0 ? ((p.all_correct / p.all_total) * 100).toFixed(1) + '%' : '';
+      return [
+        clientNameOf(p.client_id), p.name, p.login_id,
+        p.all_total, p.all_correct, ratio,
+      ].map(csvEscape).join(',');
+    }).join('\n');
+    const blob = new Blob(['﻿' + header + body], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url;
+    a.download = `集計${progressClientFilter ? '_' + clientNameOf(progressClientFilter) : ''}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const downloadProgressCsv = () => {
     const rows = progressClientFilter
       ? progressRows.filter(p => p.client_id === progressClientFilter)
@@ -746,11 +769,51 @@ export default function AdminPage() {
                 {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
               <button style={S.csvBtn} onClick={downloadProgressCsv}>📥 進捗CSV</button>
+              <button style={S.csvBtn} onClick={downloadAllTimeCsv}>📈 集計CSV（全期間）</button>
               <button style={{ ...S.csvBtn, borderColor: '#fbd38d', background: '#fffaf0', color: '#9c4221' }}
                 onClick={backfillAccuracy} title="過去の回答の正答率を再計算して埋めます">
                 🔄 過去分の正答率を再計算
               </button>
             </div>
+
+            {/* 全期間集計（GAS の「集計」シート互換：名前・回答数・正答数・正答率） */}
+            {(() => {
+              const filtered = progressClientFilter
+                ? progressRows.filter(p => p.client_id === progressClientFilter)
+                : progressRows;
+              if (!filtered.length) return null;
+              const totalSum = filtered.reduce((s, r) => s + r.all_total, 0);
+              const correctSum = filtered.reduce((s, r) => s + r.all_correct, 0);
+              const overallRate = totalSum > 0 ? ((correctSum / totalSum) * 100).toFixed(1) + '%' : '—';
+              return (
+                <div style={{ ...S.card, padding: 0, overflow: 'hidden', border: '2px solid #cbd5e0' }}>
+                  <div style={{ padding: '14px 20px', background: 'linear-gradient(90deg,#ebf8ff,#fff)', borderBottom: '1px solid #cbd5e0' }}>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: '#2d3748', marginBottom: 4 }}>📈 全期間集計</div>
+                    <div style={{ fontSize: 12, color: '#718096' }}>
+                      GAS の「集計」シート相当（全期間：名前・回答数・正答数・正答率）／
+                      合計 回答 <b>{totalSum.toLocaleString()}</b> 件、正答 <b>{correctSum.toLocaleString()}</b> 件、正答率 <b style={{ color: '#276749' }}>{overallRate}</b>
+                    </div>
+                  </div>
+                  <table style={S.table}>
+                    <thead><tr><th style={S.th}>名前</th><th style={S.th}>クライアント</th><th style={S.th}>回答数</th><th style={S.th}>正答数</th><th style={S.th}>正答率</th></tr></thead>
+                    <tbody>
+                      {[...filtered].sort((a, b) => b.all_total - a.all_total).map(p => {
+                        const rate = p.all_total > 0 ? ((p.all_correct / p.all_total) * 100).toFixed(1) + '%' : '—';
+                        return (
+                          <tr key={p.user_id}>
+                            <td style={S.td}>{p.name}</td>
+                            <td style={{ ...S.td, fontSize: 12, color: '#4a5568' }}>{clientNameOf(p.client_id) || '—'}</td>
+                            <td style={S.td}>{p.all_total.toLocaleString()}</td>
+                            <td style={S.td}>{p.all_correct.toLocaleString()}</td>
+                            <td style={{ ...S.td, fontWeight: 700, color: p.all_total > 0 ? '#276749' : '#a0aec0' }}>{rate}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
 
             {(() => {
               const filtered = progressClientFilter

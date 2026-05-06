@@ -70,6 +70,17 @@ export async function GET(req: NextRequest) {
       else wrongMap.set(a.user_id, (wrongMap.get(a.user_id) ?? 0) + 1);
     }
 
+    // 全期間集計（GAS の updateSummarySheet 互換：名前・回答数・正答数・正答率）
+    const { data: allTimeRows } = await supabaseAdmin
+      .from('answers')
+      .select('user_id, is_correct');
+    const allTotalMap = new Map<string, number>();
+    const allCorrectMap = new Map<string, number>();
+    for (const a of allTimeRows ?? []) {
+      allTotalMap.set(a.user_id, (allTotalMap.get(a.user_id) ?? 0) + 1);
+      if (a.is_correct) allCorrectMap.set(a.user_id, (allCorrectMap.get(a.user_id) ?? 0) + 1);
+    }
+
     const { data: clients } = await supabaseAdmin
       .from('clients')
       .select('id, name')
@@ -89,6 +100,8 @@ export async function GET(req: NextRequest) {
       correct_count: correctMap.get(u.id) ?? 0,
       wrong_count: wrongMap.get(u.id) ?? 0,
       empty_count: emptyMap.get(u.id) ?? 0,
+      all_total: allTotalMap.get(u.id) ?? 0,
+      all_correct: allCorrectMap.get(u.id) ?? 0,
     }));
 
     return NextResponse.json({ progress, quota, clients: clients ?? [] });
